@@ -1,0 +1,521 @@
+# ==========================================
+# Langtou 社交内容社区 APP - Docker Compose 生产环境配置
+# ==========================================
+# 包含: MySQL, Redis Cluster, Zookeeper + Kafka, Elasticsearch + Kibana,
+#       Nacos, 所有后端微服务, Prometheus + Grafana
+# ==========================================
+
+version: "3.9"
+
+networks:
+  langtou-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+volumes:
+  mysql-data:
+  es-data:
+  nacos-data:
+  grafana-data:
+  prometheus-data:
+  kafka-data:
+  zookeeper-data:
+
+services:
+  # ==========================================
+  # MySQL 8.0 (主从架构)
+  # ==========================================
+  mysql-master:
+    image: mysql:8.0
+    container_name: langtou-mysql-master
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      TZ: ${TZ}
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./scripts/mysql-master.cnf:/etc/mysql/conf.d/master.cnf:ro
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    networks:
+      langtou-network:
+        ipv4_address: 172.20.0.10
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    command: >
+      --server-id=1
+      --log-bin=mysql-bin
+      --binlog-do-db=${MYSQL_DATABASE}
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_unicode_ci
+      --default-authentication-plugin=mysql_native_password
+
+  mysql-slave:
+    image: mysql:8.0
+    container_name: langtou-mysql-slave
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      TZ: ${TZ}
+    ports:
+      - "3307:3306"
+    volumes:
+      - ./scripts/mysql-slave.cnf:/etc/mysql/conf.d/slave.cnf:ro
+    networks:
+      langtou-network:
+        ipv4_address: 172.20.0.11
+    depends_on:
+      mysql-master:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    command: >
+      --server-id=2
+      --log-bin=mysql-bin
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_unicode_ci
+      --default-authentication-plugin=mysql_native_password
+
+  # ==========================================
+  # Redis Cluster (6节点: 3主3从)
+  # ==========================================
+  redis-node-1:
+    image: redis:7-alpine
+    container_name: langtou-redis-1
+    restart: always
+    ports:
+      - "6379:6379"
+      - "16379:16379"
+    volumes:
+      - ./scripts/redis-cluster.conf:/usr/local/etc/redis/redis.conf:ro
+    networks:
+      langtou-network:
+        ipv4_address: 172.20.0.20
+    command: redis-server /usr/local/etc/redis/redis.conf --port 6379 --cluster-enabled yes --cluster-config-file nodes.conf --cluster-node-timeout 5000 --appendonly yes --requirepass ${REDIS_PASSWORD} --masterauth ${REDIS_PASSWORD}
+
+  redis-node-2:
+    image: redis:7-alpine
+    container_name: langtou-redis-2
+    restart: always
+    ports:
+      - "6380:6380"
+      - "16380:16380"
+    volumes:
+      - ./scripts/redis-cluster.conf:/usr/local/etc/redis/redis.conf:ro
+    networks:
+      langtou-network:
+        ipv4_address: 172.20.0.21
+    command: redis-server /usr/local/etc/redis/redis.conf --port 6380 --cluster-enabled yes --cluster-config-file nodes.conf --cluster-node-timeout 5000 --appendonly yes --requirepass ${REDIS_PASSWORD} --masterauth ${REDIS_PASSWORD}
+
+  redis-node-3:
+    image: redis:7-alpine
+    container_name: langtou-redis-3
+    restart: always
+    ports:
+      - "6381:6381"
+      - "16381:16381"
+    volumes:
+      - ./scripts/redis-cluster.conf:/usr/local/etc/redis/redis.conf:ro
+    networks:
+      langtou-network:
+        ipv4_address: 172.20.0.22
+    command: redis-server /usr/local/etc/redis/redis.conf --port 6381 --cluster-enabled yes --cluster-config-file nodes.conf --cluster-node-timeout 5000 --appendonly yes --requirepass ${REDIS_PASSWORD} --masterauth ${REDIS_PASSWORD}
+
+  redis-node-4:
+    image: redis:7-alpine
+    container_name: langtou-redis-4
+    restart: always
+    ports:
+      - "6382:6382"
+      - "16382:16382"
+    volumes:
+      - ./scripts/redis-cluster.conf:/usr/local/etc/redis/redis.conf:ro
+    networks:
+      langtou-network:
+        ipv4_address: 172.20.0.23
+    command: redis-server /usr/local/etc/redis/redis.conf --port 6382 --cluster-enabled yes --cluster-config-file nodes.conf --cluster-node-timeout 5000 --appendonly yes --requirepass ${REDIS_PASSWORD} --masterauth ${REDIS_PASSWORD}
+
+  redis-node-5:
+    image: redis:7-alpine
+    container_name: langtou-redis-5
+    restart: always
+    ports:
+      - "6383:6383"
+      - "16383:16383"
+    volumes:
+      - ./scripts/redis-cluster.conf:/usr/local/etc/redis/redis.conf:ro
+    networks:
+      langtou-network:
+        ipv4_address: 172.20.0.24
+    command: redis-server /usr/local/etc/redis/redis.conf --port 6383 --cluster-enabled yes --cluster-config-file nodes.conf --cluster-node-timeout 5000 --appendonly yes --requirepass ${REDIS_PASSWORD} --masterauth ${REDIS_PASSWORD}
+
+  redis-node-6:
+    image: redis:7-alpine
+    container_name: langtou-redis-6
+    restart: always
+    ports:
+      - "6384:6384"
+      - "16384:16384"
+    volumes:
+      - ./scripts/redis-cluster.conf:/usr/local/etc/redis/redis.conf:ro
+    networks:
+      langtou-network:
+        ipv4_address: 172.20.0.25
+    command: redis-server /usr/local/etc/redis/redis.conf --port 6384 --cluster-enabled yes --cluster-config-file nodes.conf --cluster-node-timeout 5000 --appendonly yes --requirepass ${REDIS_PASSWORD} --masterauth ${REDIS_PASSWORD}
+
+  redis-cluster-init:
+    image: redis:7-alpine
+    container_name: langtou-redis-cluster-init
+    depends_on:
+      - redis-node-1
+      - redis-node-2
+      - redis-node-3
+      - redis-node-4
+      - redis-node-5
+      - redis-node-6
+    networks:
+      - langtou-network
+    entrypoint: >
+      sh -c "
+        sleep 5 &&
+        redis-cli --cluster create
+          172.20.0.20:6379
+          172.20.0.21:6380
+          172.20.0.22:6381
+          172.20.0.23:6382
+          172.20.0.24:6383
+          172.20.0.25:6384
+          --cluster-replicas 1
+          --cluster-yes
+          -a ${REDIS_PASSWORD}
+      "
+
+  # ==========================================
+  # Zookeeper
+  # ==========================================
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: langtou-zookeeper
+    restart: always
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2181:2181"
+    volumes:
+      - zookeeper-data:/var/lib/zookeeper/data
+    networks:
+      langtou-network:
+        ipv4_address: 172.20.0.30
+
+  # ==========================================
+  # Kafka
+  # ==========================================
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: langtou-kafka
+    restart: always
+    depends_on:
+      - zookeeper
+    environment:
+      KAFKA_BROKER_ID: ${KAFKA_BROKER_ID}
+      KAFKA_ZOOKEEPER_CONNECT: ${KAFKA_ZOOKEEPER_CONNECT}
+      KAFKA_ADVERTISED_LISTENERS: ${KAFKA_ADVERTISED_LISTENERS}
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    ports:
+      - "9092:9092"
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    networks:
+      langtou-network:
+        ipv4_address: 172.20.0.31
+    healthcheck:
+      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ==========================================
+  # Elasticsearch
+  # ==========================================
+  elasticsearch:
+    image: elasticsearch:8.11.0
+    container_name: langtou-elasticsearch
+    restart: always
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=true
+      - ELASTIC_PASSWORD=${ELASTIC_PASSWORD}
+      - "ES_JAVA_OPTS=-Xms1g -Xmx1g"
+      - TZ=${TZ}
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    volumes:
+      - es-data:/usr/share/elasticsearch/data
+    networks:
+      langtou-network:
+        ipv4_address: 172.20.0.40
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s -u elastic:${ELASTIC_PASSWORD} http://localhost:9200/_cluster/health | grep -q 'status'"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # ==========================================
+  # Kibana
+  # ==========================================
+  kibana:
+    image: kibana:8.11.0
+    container_name: langtou-kibana
+    restart: always
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+      - ELASTICSEARCH_USERNAME=elastic
+      - ELASTICSEARCH_PASSWORD=${ELASTIC_PASSWORD}
+      - TZ=${TZ}
+    ports:
+      - "5601:5601"
+    networks:
+      langtou-network:
+        ipv4_address: 172.20.0.41
+
+  # ==========================================
+  # Nacos (注册中心/配置中心)
+  # ==========================================
+  nacos:
+    image: nacos/nacos-server:v2.3.0
+    container_name: langtou-nacos
+    restart: always
+    environment:
+      MODE: standalone
+      PREFER_HOST_MODE: ip
+      SPRING_DATASOURCE_PLATFORM: mysql
+      MYSQL_SERVICE_HOST: mysql-master
+      MYSQL_SERVICE_DB_NAME: nacos
+      MYSQL_SERVICE_PORT: 3306
+      MYSQL_SERVICE_USER: root
+      MYSQL_SERVICE_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      NACOS_AUTH_ENABLE: ${NACOS_AUTH_ENABLE}
+      NACOS_AUTH_TOKEN: ${NACOS_AUTH_TOKEN}
+      NACOS_AUTH_IDENTITY_KEY: ${NACOS_AUTH_IDENTITY_KEY}
+      NACOS_AUTH_IDENTITY_VALUE: ${NACOS_AUTH_IDENTITY_VALUE}
+      JVM_XMS: 512m
+      JVM_XMX: 512m
+      JVM_XMN: 256m
+      TZ: ${TZ}
+    ports:
+      - "8848:8848"
+      - "9848:9848"
+      - "9849:9849"
+    volumes:
+      - nacos-data:/home/nacos/data
+    networks:
+      langtou-network:
+        ipv4_address: 172.20.0.50
+    depends_on:
+      mysql-master:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8848/nacos/v1/console/health/readiness"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ==========================================
+  # 后端微服务
+  # ==========================================
+  gateway:
+    image: ${DOCKER_REGISTRY}/${DOCKER_NAMESPACE}/gateway:${IMAGE_TAG}
+    container_name: langtou-gateway
+    restart: always
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - NACOS_SERVER_ADDR=nacos:8848
+      - JVM_OPTS=${JVM_OPTS}
+      - TZ=${TZ}
+    ports:
+      - "${GATEWAY_PORT}:8080"
+    networks:
+      - langtou-network
+    depends_on:
+      nacos:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 512M
+
+  user-service:
+    image: ${DOCKER_REGISTRY}/${DOCKER_NAMESPACE}/user-service:${IMAGE_TAG}
+    container_name: langtou-user-service
+    restart: always
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - NACOS_SERVER_ADDR=nacos:8848
+      - MYSQL_HOST=mysql-master
+      - MYSQL_PORT=3306
+      - MYSQL_DATABASE=${MYSQL_DATABASE}
+      - MYSQL_USER=${MYSQL_USER}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+      - REDIS_HOST=redis-node-1
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - JVM_OPTS=${JVM_OPTS}
+      - TZ=${TZ}
+    ports:
+      - "${USER_SERVICE_PORT}:8080"
+    networks:
+      - langtou-network
+    depends_on:
+      - mysql-master
+      - redis-cluster-init
+      - nacos
+
+  content-service:
+    image: ${DOCKER_REGISTRY}/${DOCKER_NAMESPACE}/content-service:${IMAGE_TAG}
+    container_name: langtou-content-service
+    restart: always
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - NACOS_SERVER_ADDR=nacos:8848
+      - MYSQL_HOST=mysql-master
+      - MYSQL_PORT=3306
+      - MYSQL_DATABASE=${MYSQL_DATABASE}
+      - MYSQL_USER=${MYSQL_USER}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+      - REDIS_HOST=redis-node-1
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - ES_HOST=elasticsearch
+      - ES_PORT=9200
+      - ES_USERNAME=elastic
+      - ES_PASSWORD=${ELASTIC_PASSWORD}
+      - JVM_OPTS=${JVM_OPTS}
+      - TZ=${TZ}
+    ports:
+      - "${CONTENT_SERVICE_PORT}:8080"
+    networks:
+      - langtou-network
+    depends_on:
+      - mysql-master
+      - redis-cluster-init
+      - elasticsearch
+      - nacos
+
+  interact-service:
+    image: ${DOCKER_REGISTRY}/${DOCKER_NAMESPACE}/interact-service:${IMAGE_TAG}
+    container_name: langtou-interact-service
+    restart: always
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - NACOS_SERVER_ADDR=nacos:8848
+      - MYSQL_HOST=mysql-master
+      - MYSQL_PORT=3306
+      - MYSQL_DATABASE=${MYSQL_DATABASE}
+      - MYSQL_USER=${MYSQL_USER}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+      - REDIS_HOST=redis-node-1
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - JVM_OPTS=${JVM_OPTS}
+      - TZ=${TZ}
+    ports:
+      - "${INTERACT_SERVICE_PORT}:8080"
+    networks:
+      - langtou-network
+    depends_on:
+      - mysql-master
+      - redis-cluster-init
+      - kafka
+      - nacos
+
+  message-service:
+    image: ${DOCKER_REGISTRY}/${DOCKER_NAMESPACE}/message-service:${IMAGE_TAG}
+    container_name: langtou-message-service
+    restart: always
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - NACOS_SERVER_ADDR=nacos:8848
+      - MYSQL_HOST=mysql-master
+      - MYSQL_PORT=3306
+      - MYSQL_DATABASE=${MYSQL_DATABASE}
+      - MYSQL_USER=${MYSQL_USER}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+      - REDIS_HOST=redis-node-1
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - JVM_OPTS=${JVM_OPTS}
+      - TZ=${TZ}
+    ports:
+      - "${MESSAGE_SERVICE_PORT}:8080"
+    networks:
+      - langtou-network
+    depends_on:
+      - mysql-master
+      - redis-cluster-init
+      - kafka
+      - nacos
+
+  # ==========================================
+  # Prometheus
+  # ==========================================
+  prometheus:
+    image: prom/prometheus:v2.48.0
+    container_name: langtou-prometheus
+    restart: always
+    ports:
+      - "${PROMETHEUS_PORT}:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    networks:
+      langtou-network:
+        ipv4_address: 172.20.0.60
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.enable-lifecycle'
+
+  # ==========================================
+  # Grafana
+  # ==========================================
+  grafana:
+    image: grafana/grafana:10.2.0
+    container_name: langtou-grafana
+    restart: always
+    ports:
+      - "${GRAFANA_PORT}:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD}
+      - GF_INSTALL_PLUGINS=grafana-clock-panel,grafana-simple-json-datasource
+      - TZ=${TZ}
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./monitoring/grafana-dashboard.json:/var/lib/grafana/dashboards/langtou-dashboard.json:ro
+      - ./monitoring/grafana-provisioning:/etc/grafana/provisioning:ro
+    networks:
+      langtou-network:
+        ipv4_address: 172.20.0.61
+    depends_on:
+      - prometheus

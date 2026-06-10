@@ -1,0 +1,154 @@
+# ==========================================
+# Langtou 社交内容社区 APP - Alertmanager 配置
+# ==========================================
+
+global:
+  smtp_smarthost: 'smtp.gmail.com:587'
+  smtp_from: 'alerts@langtou.com'
+  smtp_auth_username: 'alerts@langtou.com'
+  smtp_auth_password: 'your-email-password'
+  smtp_require_tls: true
+
+  # Slack配置
+  slack_api_url: 'https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK'
+
+  # PagerDuty配置
+  pagerduty_url: 'https://events.pagerduty.com/v2/enqueue'
+
+  # 微信企业号配置
+  wechat_api_url: 'https://qyapi.weixin.qq.com/cgi-bin/'
+  wechat_api_secret: 'your-wechat-secret'
+
+# 路由配置
+route:
+  group_by: ['alertname', 'cluster', 'service']
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 12h
+  receiver: 'default'
+  routes:
+    # 严重告警
+    - match:
+        severity: critical
+      receiver: 'critical-alerts'
+      group_wait: 10s
+      repeat_interval: 5m
+      continue: true
+
+    # 警告级别告警
+    - match:
+        severity: warning
+      receiver: 'warning-alerts'
+      group_wait: 30s
+      repeat_interval: 1h
+
+    # 微服务相关告警
+    - match_re:
+        service: gateway|user-service|content-service|interact-service|message-service
+      receiver: 'backend-team'
+      group_by: ['service', 'alertname']
+
+    # 基础设施告警
+    - match_re:
+        service: mysql|redis|kafka|elasticsearch|nginx
+      receiver: 'infra-team'
+      group_by: ['service', 'alertname']
+
+# 抑制规则
+inhibit_rules:
+  # 当服务宕机时,抑制该服务的其他告警
+  - source_match:
+      severity: 'critical'
+    target_match:
+      severity: 'warning'
+    equal: ['service', 'instance']
+
+# 接收者配置
+receivers:
+  - name: 'default'
+    email_configs:
+      - to: 'devops@langtou.com'
+        send_resolved: true
+        headers:
+          Subject: '[Langtou Alert] {{ .GroupLabels.alertname }}'
+        html: |
+          {{ range .Alerts }}
+          <h3>{{ .Annotations.summary }}</h3>
+          <p><strong>Severity:</strong> {{ .Labels.severity }}</p>
+          <p><strong>Service:</strong> {{ .Labels.service }}</p>
+          <p><strong>Description:</strong> {{ .Annotations.description }}</p>
+          <p><strong>Started:</strong> {{ .StartsAt.Format "2006-01-02 15:04:05" }}</p>
+          {{ end }}
+
+  - name: 'critical-alerts'
+    email_configs:
+      - to: 'oncall@langtou.com,devops@langtou.com'
+        send_resolved: true
+        headers:
+          Subject: '[CRITICAL] Langtou Alert - {{ .GroupLabels.alertname }}'
+    slack_configs:
+      - channel: '#critical-alerts'
+        send_resolved: true
+        title: ':fire: Critical Alert: {{ .GroupLabels.alertname }}'
+        text: |
+          {{ range .Alerts }}
+          *Service:* {{ .Labels.service }}
+          *Instance:* {{ .Labels.instance }}
+          *Severity:* {{ .Labels.severity }}
+          *Description:* {{ .Annotations.description }}
+          *Time:* {{ .StartsAt.Format "2006-01-02 15:04:05" }}
+          {{ end }}
+    webhook_configs:
+      - url: 'http://dingtalk-webhook:8060/dingtalk/send'
+        send_resolved: true
+
+  - name: 'warning-alerts'
+    email_configs:
+      - to: 'devops@langtou.com'
+        send_resolved: true
+    slack_configs:
+      - channel: '#alerts'
+        send_resolved: true
+        title: 'Warning: {{ .GroupLabels.alertname }}'
+        text: |
+          {{ range .Alerts }}
+          *Service:* {{ .Labels.service }}
+          *Description:* {{ .Annotations.description }}
+          {{ end }}
+
+  - name: 'backend-team'
+    email_configs:
+      - to: 'backend@langtou.com'
+        send_resolved: true
+    slack_configs:
+      - channel: '#backend-alerts'
+        send_resolved: true
+        title: 'Backend Alert: {{ .GroupLabels.alertname }}'
+
+  - name: 'infra-team'
+    email_configs:
+      - to: 'infra@langtou.com'
+        send_resolved: true
+    slack_configs:
+      - channel: '#infrastructure-alerts'
+        send_resolved: true
+        title: 'Infrastructure Alert: {{ .GroupLabels.alertname }}'
+
+  # 企业微信告警
+  - name: 'wechat-alerts'
+    wechat_configs:
+      - corp_id: 'your-corp-id'
+        to_party: '2'
+        agent_id: '1000002'
+        api_secret: 'your-api-secret'
+        send_resolved: true
+        message: |
+          {{ if eq .Status "firing" }}[告警]{{ else }}[恢复]{{ end }}
+          {{ range .Alerts }}
+          告警名称: {{ .Annotations.summary }}
+          告警级别: {{ .Labels.severity }}
+          服务: {{ .Labels.service }}
+          实例: {{ .Labels.instance }}
+          描述: {{ .Annotations.description }}
+          时间: {{ .StartsAt.Format "2006-01-02 15:04:05" }}
+          {{ end }}

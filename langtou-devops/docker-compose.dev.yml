@@ -1,0 +1,153 @@
+# ==========================================
+# Langtou 社交内容社区 APP - Docker Compose 开发环境轻量版
+# ==========================================
+# 仅包含: MySQL, Redis (单实例), Kafka (单节点), Elasticsearch,
+#       Nacos, 可选微服务
+# ==========================================
+
+version: "3.9"
+
+networks:
+  langtou-dev-network:
+    driver: bridge
+
+volumes:
+  mysql-dev-data:
+  redis-dev-data:
+  es-dev-data:
+  nacos-dev-data:
+
+services:
+  # ==========================================
+  # MySQL 8.0 (单实例)
+  # ==========================================
+  mysql-dev:
+    image: mysql:8.0
+    container_name: langtou-mysql-dev
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      TZ: ${TZ}
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql-dev-data:/var/lib/mysql
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    networks:
+      - langtou-dev-network
+    command: >
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_unicode_ci
+      --default-authentication-plugin=mysql_native_password
+
+  # ==========================================
+  # Redis (单实例)
+  # ==========================================
+  redis-dev:
+    image: redis:7-alpine
+    container_name: langtou-redis-dev
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-dev-data:/data
+    networks:
+      - langtou-dev-network
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
+
+  # ==========================================
+  # Zookeeper (开发版)
+  # ==========================================
+  zookeeper-dev:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: langtou-zookeeper-dev
+    restart: unless-stopped
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2181:2181"
+    networks:
+      - langtou-dev-network
+
+  # ==========================================
+  # Kafka (单节点)
+  # ==========================================
+  kafka-dev:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: langtou-kafka-dev
+    restart: unless-stopped
+    depends_on:
+      - zookeeper-dev
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper-dev:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    ports:
+      - "9092:9092"
+    networks:
+      - langtou-dev-network
+
+  # ==========================================
+  # Elasticsearch (单节点, 无安全)
+  # ==========================================
+  elasticsearch-dev:
+    image: elasticsearch:8.11.0
+    container_name: langtou-elasticsearch-dev
+    restart: unless-stopped
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+      - TZ=${TZ}
+    ports:
+      - "9200:9200"
+    volumes:
+      - es-dev-data:/usr/share/elasticsearch/data
+    networks:
+      - langtou-dev-network
+
+  # ==========================================
+  # Kibana (开发版)
+  # ==========================================
+  kibana-dev:
+    image: kibana:8.11.0
+    container_name: langtou-kibana-dev
+    restart: unless-stopped
+    depends_on:
+      - elasticsearch-dev
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch-dev:9200
+      - TZ=${TZ}
+    ports:
+      - "5601:5601"
+    networks:
+      - langtou-dev-network
+
+  # ==========================================
+  # Nacos (开发版, 使用嵌入式数据库)
+  # ==========================================
+  nacos-dev:
+    image: nacos/nacos-server:v2.3.0
+    container_name: langtou-nacos-dev
+    restart: unless-stopped
+    environment:
+      MODE: standalone
+      SPRING_DATASOURCE_PLATFORM: ""
+      NACOS_AUTH_ENABLE: "false"
+      JVM_XMS: 256m
+      JVM_XMX: 512m
+      JVM_XMN: 128m
+      TZ: ${TZ}
+    ports:
+      - "8848:8848"
+      - "9848:9848"
+    volumes:
+      - nacos-dev-data:/home/nacos/data
+    networks:
+      - langtou-dev-network

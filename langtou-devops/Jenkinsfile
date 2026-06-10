@@ -1,0 +1,388 @@
+#!/usr/bin/env groovy
+// ==========================================
+// Langtou 社交内容社区 APP - Jenkins CI/CD Pipeline
+// ==========================================
+// 功能: 代码检出 -> Maven编译/测试 -> Docker构建 -> 推送镜像 -> K8s部署
+// ==========================================
+
+pipeline {
+    agent any
+
+    environment {
+        // 项目配置
+        PROJECT_NAME = 'langtou'
+        DOCKER_REGISTRY = 'registry.langtou.local'
+        DOCKER_NAMESPACE = 'langtou'
+        K8S_NAMESPACE = 'langtou'
+
+        // 服务列表
+        SERVICES = 'gateway,user-service,content-service,interact-service,message-service'
+
+        // 凭证ID (需在Jenkins中预先配置)
+        DOCKER_CREDENTIALS_ID = 'docker-registry-credentials'
+        K8S_CREDENTIALS_ID = 'k8s-kubeconfig'
+        GIT_CREDENTIALS_ID = 'git-credentials'
+
+        // Maven配置
+        MAVEN_OPTS = '-Dmaven.test.failure.ignore=true -DskipTests=false'
+    }
+
+    options {
+        buildDiscarder(logRotator(numToKeepStr: '10'))
+        timeout(time: 60, unit: 'MINUTES')
+        disableConcurrentBuilds()
+    }
+
+    triggers {
+        // 每晚2点自动构建develop分支
+        cron('H 2 * * *')
+    }
+
+    stages {
+        // ==========================================
+        // Stage 1: 代码检出
+        // ==========================================
+        stage('Checkout') {
+            steps {
+                script {
+                    echo "=================================="
+                    echo "正在检出代码..."
+                    echo "=================================="
+                }
+                checkout scm
+                sh '''
+                    echo "Git Commit: $(git rev-parse HEAD)"
+                    echo "Git Branch: $(git rev-parse --abbrev-ref HEAD)"
+                    echo "Build Time: $(date '+%Y-%m-%d %H:%M:%S')"
+                '''
+            }
+        }
+
+        // ==========================================
+        // Stage 2: 代码质量检查
+        // ==========================================
+        stage('Code Quality') {
+            parallel {
+                stage('Checkstyle') {
+                    steps {
+                        dir('langtou-backend') {
+                            sh 'mvn checkstyle:check -f pom.xml || true'
+                        }
+                    }
+                }
+                stage('SpotBugs') {
+                    steps {
+                        dir('langtou-backend') {
+                            sh 'mvn spotbugs:check -f pom.xml || true'
+                        }
+                    }
+                }
+            }
+        }
+
+        // ==========================================
+        // Stage 3: Maven编译与单元测试
+        // ==========================================
+        stage('Build & Test') {
+            steps {
+                script {
+                    echo "=================================="
+                    echo "开始 Maven 编译与测试..."
+                    echo "=================================="
+                }
+                dir('langtou-backend') {
+                    sh 'mvn clean compile ${MAVEN_OPTS}'
+                    sh 'mvn test ${MAVEN_OPTS}'
+                }
+            }
+            post {
+                always {
+                    // 收集测试报告
+                    junit 'langtou-backend/**/target/surefire-reports/*.xml'
+                    // 收集覆盖率报告
+                    jacoco(
+                        execPattern: 'langtou-backend/**/target/jacoco.exec',
+                        classPattern: 'langtou-backend/**/target/classes',
+                        sourcePattern: 'langtou-backend/**/src/main/java'
+                    )
+                }
+            }
+        }
+
+        // ==========================================
+        // Stage 4: 集成测试
+        // ==========================================
+        stage('Integration Test') {
+            when {
+                anyOf {
+                    branch 'develop'
+                    branch 'release/*'
+                    branch 'main'
+                    branch 'master'
+                }
+            }
+            steps {
+                dir('langtou-backend') {
+                    sh 'mvn verify -P integration-test ${MAVEN_OPTS} || true'
+                }
+            }
+        }
+
+        // ==========================================
+        // Stage 5: Docker镜像构建
+        // ==========================================
+        stage('Docker Build') {
+            when {
+                anyOf {
+                    branch 'develop'
+                    branch 'release/*'
+                    branch 'main'
+                    branch 'master'
+                }
+            }
+            steps {
+                script {
+                    echo "=================================="
+                    echo "开始构建 Docker 镜像..."
+                    echo "=================================="
+
+                    def imageTag = env.GIT_COMMIT?.take(8) ?: 'latest'
+                    def branchName = env.GIT_BRANCH?.replaceAll('origin/', '') ?: 'latest'
+
+                    env.IMAGE_TAG = imageTag
+                    env.BRANCH_NAME = branchName
+
+                    // 登录Docker仓库
+                    withCredentials([usernamePassword(
+                        credentialsId: "${DOCKER_CREDENTIALS_ID}",
+                        usernameVariable: 'DOCKER_USER',
+                        passwordVariable: 'DOCKER_PASS'
+                    )]) {
+                        sh "echo \${DOCKER_PASS} | docker login \${DOCKER_REGISTRY} -u \${DOCKER_USER} --password-stdin"
+                    }
+
+                    // 并行构建所有服务镜像
+                    def services = env.SERVICES.split(',')
+                    def buildJobs = [:]
+
+                    services.each { service ->
+                        buildJobs["Build-${service}"] = {
+                            dir("langtou-backend/${service}") {
+                                sh """
+                                    docker build \
+                                        -t \${DOCKER_REGISTRY}/\${DOCKER_NAMESPACE}/${service}:\${IMAGE_TAG} \
+                                        -t \${DOCKER_REGISTRY}/\${DOCKER_NAMESPACE}/${service}:\${BRANCH_NAME} \
+                                        -f Dockerfile \
+                                        --build-arg JAR_FILE=target/${service}-*.jar \
+                                        .
+                                """
+                            }
+                        }
+                    }
+
+                    parallel buildJobs
+                }
+            }
+        }
+
+        // ==========================================
+        // Stage 6: 推送镜像到仓库
+        // ==========================================
+        stage('Push Images') {
+            when {
+                anyOf {
+                    branch 'develop'
+                    branch 'release/*'
+                    branch 'main'
+                    branch 'master'
+                }
+            }
+            steps {
+                script {
+                    echo "=================================="
+                    echo "推送镜像到仓库..."
+                    echo "=================================="
+
+                    def services = env.SERVICES.split(',')
+                    def pushJobs = [:]
+
+                    services.each { service ->
+                        pushJobs["Push-${service}"] = {
+                            sh """
+                                docker push \${DOCKER_REGISTRY}/\${DOCKER_NAMESPACE}/${service}:\${IMAGE_TAG}
+                                docker push \${DOCKER_REGISTRY}/\${DOCKER_NAMESPACE}/${service}:\${BRANCH_NAME}
+                            """
+                        }
+                    }
+
+                    parallel pushJobs
+                }
+            }
+        }
+
+        // ==========================================
+        // Stage 7: 安全扫描
+        // ==========================================
+        stage('Security Scan') {
+            when {
+                anyOf {
+                    branch 'release/*'
+                    branch 'main'
+                    branch 'master'
+                }
+            }
+            steps {
+                script {
+                    def services = env.SERVICES.split(',')
+                    services.each { service ->
+                        sh """
+                            # 使用Trivy进行镜像安全扫描
+                            trivy image \
+                                --severity HIGH,CRITICAL \
+                                --exit-code 0 \
+                                --format table \
+                                \${DOCKER_REGISTRY}/\${DOCKER_NAMESPACE}/${service}:\${IMAGE_TAG} || true
+                        """
+                    }
+                }
+            }
+        }
+
+        // ==========================================
+        // Stage 8: Kubernetes部署
+        // ==========================================
+        stage('Deploy to K8s') {
+            when {
+                anyOf {
+                    branch 'develop'
+                    branch 'release/*'
+                    branch 'main'
+                    branch 'master'
+                }
+            }
+            steps {
+                script {
+                    echo "=================================="
+                    echo "部署到 Kubernetes..."
+                    echo "=================================="
+
+                    // 确定部署环境
+                    def deployEnv = 'dev'
+                    if (env.BRANCH_NAME?.startsWith('release/')) {
+                        deployEnv = 'staging'
+                    } else if (env.BRANCH_NAME == 'main' || env.BRANCH_NAME == 'master') {
+                        deployEnv = 'prod'
+                    }
+
+                    env.DEPLOY_ENV = deployEnv
+
+                    withCredentials([file(
+                        credentialsId: "${K8S_CREDENTIALS_ID}",
+                        variable: 'KUBECONFIG'
+                    )]) {
+                        dir('langtou-devops') {
+                            sh """
+                                chmod +x scripts/deploy-k8s.sh
+                                ./scripts/deploy-k8s.sh \${DEPLOY_ENV} \${IMAGE_TAG}
+                            """
+                        }
+                    }
+                }
+            }
+        }
+
+        // ==========================================
+        // Stage 9: 健康检查
+        // ==========================================
+        stage('Health Check') {
+            when {
+                anyOf {
+                    branch 'develop'
+                    branch 'release/*'
+                    branch 'main'
+                    branch 'master'
+                }
+            }
+            steps {
+                script {
+                    echo "=================================="
+                    echo "执行健康检查..."
+                    echo "=================================="
+
+                    // 等待服务启动
+                    sleep(time: 30, unit: 'SECONDS')
+
+                    // 检查Gateway健康端点
+                    def gatewayUrl = ""
+                    if (env.DEPLOY_ENV == 'dev') {
+                        gatewayUrl = "http://gateway.langtou-dev.local/actuator/health"
+                    } else if (env.DEPLOY_ENV == 'staging') {
+                        gatewayUrl = "http://gateway.langtou-staging.local/actuator/health"
+                    } else {
+                        gatewayUrl = "http://gateway.langtou.local/actuator/health"
+                    }
+
+                    sh """
+                        curl -f -s -o /dev/null -w "%{http_code}" \
+                            --max-time 30 \
+                            --retry 5 \
+                            --retry-delay 10 \
+                            ${gatewayUrl} || echo "Health check failed"
+                    """
+                }
+            }
+        }
+
+        // ==========================================
+        // Stage 10: 清理
+        // ==========================================
+        stage('Cleanup') {
+            steps {
+                script {
+                    echo "=================================="
+                    echo "清理构建产物..."
+                    echo "=================================="
+
+                    // 清理本地镜像以节省空间
+                    sh '''
+                        docker system prune -f || true
+                        docker volume prune -f || true
+                    '''
+                }
+            }
+        }
+    }
+
+    // ==========================================
+    // Post 构建处理
+    // ==========================================
+    post {
+        always {
+            script {
+                echo "=================================="
+                echo "构建完成: ${currentBuild.result}"
+                echo "=================================="
+            }
+            // 发送通知 (可选)
+            // slackSend channel: '#builds', message: "Build ${currentBuild.result}: ${env.JOB_NAME} #${env.BUILD_NUMBER}"
+        }
+
+        success {
+            script {
+                echo "构建成功!"
+            }
+        }
+
+        failure {
+            script {
+                echo "构建失败,请检查日志!"
+            }
+        }
+
+        unstable {
+            script {
+                echo "构建不稳定,可能存在测试失败!"
+            }
+        }
+    }
+}

@@ -1,0 +1,71 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: langtou-gateway
+  cloud:
+    gateway:
+      discovery:
+        locator:
+          enabled: false
+          lower-case-service-id: true
+      routes:
+        - id: langtou-user-service
+          uri: lb://langtou-user-service
+          predicates:
+            - Path=/api/user/**
+          filters:
+            - StripPrefix=1
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 100
+                redis-rate-limiter.burstCapacity: 200
+                key-resolver: "#{@ipKeyResolver}"
+
+        - id: langtou-content-service
+          uri: lb://langtou-content-service
+          predicates:
+            - Path=/api/content/**
+          filters:
+            - StripPrefix=1
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 200
+                redis-rate-limiter.burstCapacity: 400
+                key-resolver: "#{@ipKeyResolver}"
+
+        - id: langtou-interact-service
+          uri: lb://langtou-interact-service
+          predicates:
+            - Path=/api/interact/**
+          filters:
+            - StripPrefix=1
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 300
+                redis-rate-limiter.burstCapacity: 600
+                key-resolver: "#{@ipKeyResolver}"
+
+        - id: langtou-message-service
+          uri: lb://langtou-message-service
+          predicates:
+            - Path=/api/message/**
+          filters:
+            - StripPrefix=1
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 100
+                redis-rate-limiter.burstCapacity: 200
+                key-resolver: "#{@ipKeyResolver}"
+      globalcors:
+        cors-configurations:
+          '[/**]':
+            allowedOrigins: "*"
+            allowedMethods: "*"
+            allowedHeaders: "*"
+            allowCredentials: false
+
+logging:
+  level:
+    org.springframework.cloud.gateway: DEBUG
