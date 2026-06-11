@@ -1,0 +1,482 @@
+# ==========================================
+# Langtou 社交内容社区 APP - Docker Compose 开发环境轻量版
+# ==========================================
+# 仅包含: MySQL (单实例), Redis (单实例), Kafka (单节点), Elasticsearch,
+#       Nacos (嵌入式), 所有业务服务, Python推荐服务, Nginx
+# 不包含: 监控服务 (Prometheus/Grafana 可选)
+# ==========================================
+
+version: "3.9"
+
+networks:
+  langtou-dev-network:
+    driver: bridge
+
+volumes:
+  mysql-dev-data:
+  redis-dev-data:
+  es-dev-data:
+  nacos-dev-data:
+  kafka-dev-data:
+  zookeeper-dev-data:
+
+services:
+  # ==========================================
+  # MySQL 8.0 (单实例)
+  # ==========================================
+  langtou-mysql-dev:
+    image: mysql:8.0
+    container_name: langtou-mysql-dev
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      TZ: ${TZ}
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql-dev-data:/var/lib/mysql
+      - ../langtou-database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ../langtou-database/data.sql:/docker-entrypoint-initdb.d/02-data.sql:ro
+    networks:
+      - langtou-dev-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    command: >
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_unicode_ci
+      --default-authentication-plugin=mysql_native_password
+      --innodb_buffer_pool_size=256M
+
+  # ==========================================
+  # Redis (单实例)
+  # ==========================================
+  langtou-redis-dev:
+    image: redis:7-alpine
+    container_name: langtou-redis-dev
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-dev-data:/data
+    networks:
+      - langtou-dev-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
+
+  # ==========================================
+  # Zookeeper (开发版)
+  # ==========================================
+  langtou-zookeeper-dev:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: langtou-zookeeper-dev
+    restart: unless-stopped
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2181:2181"
+    volumes:
+      - zookeeper-dev-data:/var/lib/zookeeper/data
+    networks:
+      - langtou-dev-network
+    healthcheck:
+      test: ["CMD", "bash", "-c", "echo 'ruok' | nc localhost 2181 | grep imok"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ==========================================
+  # Kafka (单节点)
+  # ==========================================
+  langtou-kafka-dev:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: langtou-kafka-dev
+    restart: unless-stopped
+    depends_on:
+      langtou-zookeeper-dev:
+        condition: service_healthy
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: langtou-zookeeper-dev:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    ports:
+      - "9092:9092"
+    volumes:
+      - kafka-dev-data:/var/lib/kafka/data
+    networks:
+      - langtou-dev-network
+    healthcheck:
+      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ==========================================
+  # Elasticsearch (单节点, 无安全)
+  # ==========================================
+  langtou-elasticsearch-dev:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.12.0
+    container_name: langtou-elasticsearch-dev
+    restart: unless-stopped
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+      - TZ=${TZ}
+    ports:
+      - "9200:9200"
+    volumes:
+      - es-dev-data:/usr/share/elasticsearch/data
+    networks:
+      - langtou-dev-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s http://localhost:9200/_cluster/health | grep -q 'status'"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+
+  # ==========================================
+  # Kibana (开发版)
+  # ==========================================
+  langtou-kibana-dev:
+    image: docker.elastic.co/kibana/kibana:8.12.0
+    container_name: langtou-kibana-dev
+    restart: unless-stopped
+    depends_on:
+      langtou-elasticsearch-dev:
+        condition: service_healthy
+    environment:
+      - ELASTICSEARCH_HOSTS=http://langtou-elasticsearch-dev:9200
+      - TZ=${TZ}
+    ports:
+      - "5601:5601"
+    networks:
+      - langtou-dev-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:5601/api/status | grep -q 'available'"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  # ==========================================
+  # Nacos (开发版, 使用嵌入式数据库)
+  # ==========================================
+  langtou-nacos-dev:
+    image: nacos/nacos-server:v2.3.0
+    container_name: langtou-nacos-dev
+    restart: unless-stopped
+    environment:
+      MODE: standalone
+      SPRING_DATASOURCE_PLATFORM: ""
+      NACOS_AUTH_ENABLE: "false"
+      JVM_XMS: 256m
+      JVM_XMX: 512m
+      JVM_XMN: 128m
+      TZ: ${TZ}
+    ports:
+      - "8848:8848"
+      - "9848:9848"
+    volumes:
+      - nacos-dev-data:/home/nacos/data
+    networks:
+      - langtou-dev-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8848/nacos/v1/console/health/readiness"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+
+  # ==========================================
+  # Nginx (开发版)
+  # ==========================================
+  langtou-nginx-dev:
+    image: nginx:alpine
+    container_name: langtou-nginx-dev
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/h5.conf:/etc/nginx/conf.d/h5.conf:ro
+    networks:
+      - langtou-dev-network
+    depends_on:
+      - langtou-gateway-dev
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # ==========================================
+  # 后端微服务 (开发版)
+  # ==========================================
+  langtou-gateway-dev:
+    image: ${DOCKER_REGISTRY}/${DOCKER_NAMESPACE}/gateway:${IMAGE_TAG}
+    container_name: langtou-gateway-dev
+    restart: unless-stopped
+    environment:
+      - SPRING_PROFILES_ACTIVE=dev
+      - NACOS_SERVER_ADDR=langtou-nacos-dev:8848
+      - JVM_OPTS=-Xms256m -Xmx512m -XX:+UseG1GC
+      - TZ=${TZ}
+    ports:
+      - "${GATEWAY_PORT}:8080"
+    networks:
+      - langtou-dev-network
+    depends_on:
+      langtou-nacos-dev:
+        condition: service_healthy
+      langtou-user-service-dev:
+        condition: service_healthy
+      langtou-content-service-dev:
+        condition: service_healthy
+      langtou-interact-service-dev:
+        condition: service_healthy
+      langtou-message-service-dev:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  langtou-user-service-dev:
+    image: ${DOCKER_REGISTRY}/${DOCKER_NAMESPACE}/user-service:${IMAGE_TAG}
+    container_name: langtou-user-service-dev
+    restart: unless-stopped
+    environment:
+      - SPRING_PROFILES_ACTIVE=dev
+      - NACOS_SERVER_ADDR=langtou-nacos-dev:8848
+      - MYSQL_HOST=langtou-mysql-dev
+      - MYSQL_PORT=3306
+      - MYSQL_DATABASE=${MYSQL_DATABASE}
+      - MYSQL_USER=${MYSQL_USER}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+      - REDIS_HOST=langtou-redis-dev
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - JVM_OPTS=-Xms256m -Xmx512m -XX:+UseG1GC
+      - TZ=${TZ}
+    ports:
+      - "${USER_SERVICE_PORT}:8080"
+    networks:
+      - langtou-dev-network
+    depends_on:
+      langtou-mysql-dev:
+        condition: service_healthy
+      langtou-nacos-dev:
+        condition: service_healthy
+      langtou-redis-dev:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  langtou-content-service-dev:
+    image: ${DOCKER_REGISTRY}/${DOCKER_NAMESPACE}/content-service:${IMAGE_TAG}
+    container_name: langtou-content-service-dev
+    restart: unless-stopped
+    environment:
+      - SPRING_PROFILES_ACTIVE=dev
+      - NACOS_SERVER_ADDR=langtou-nacos-dev:8848
+      - MYSQL_HOST=langtou-mysql-dev
+      - MYSQL_PORT=3306
+      - MYSQL_DATABASE=${MYSQL_DATABASE}
+      - MYSQL_USER=${MYSQL_USER}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+      - REDIS_HOST=langtou-redis-dev
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - ES_HOST=langtou-elasticsearch-dev
+      - ES_PORT=9200
+      - JVM_OPTS=-Xms256m -Xmx512m -XX:+UseG1GC
+      - TZ=${TZ}
+    ports:
+      - "${CONTENT_SERVICE_PORT}:8080"
+    networks:
+      - langtou-dev-network
+    depends_on:
+      langtou-mysql-dev:
+        condition: service_healthy
+      langtou-nacos-dev:
+        condition: service_healthy
+      langtou-elasticsearch-dev:
+        condition: service_healthy
+      langtou-redis-dev:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  langtou-interact-service-dev:
+    image: ${DOCKER_REGISTRY}/${DOCKER_NAMESPACE}/interact-service:${IMAGE_TAG}
+    container_name: langtou-interact-service-dev
+    restart: unless-stopped
+    environment:
+      - SPRING_PROFILES_ACTIVE=dev
+      - NACOS_SERVER_ADDR=langtou-nacos-dev:8848
+      - MYSQL_HOST=langtou-mysql-dev
+      - MYSQL_PORT=3306
+      - MYSQL_DATABASE=${MYSQL_DATABASE}
+      - MYSQL_USER=${MYSQL_USER}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+      - REDIS_HOST=langtou-redis-dev
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - KAFKA_BOOTSTRAP_SERVERS=langtou-kafka-dev:9092
+      - JVM_OPTS=-Xms256m -Xmx512m -XX:+UseG1GC
+      - TZ=${TZ}
+    ports:
+      - "${INTERACT_SERVICE_PORT}:8080"
+    networks:
+      - langtou-dev-network
+    depends_on:
+      langtou-mysql-dev:
+        condition: service_healthy
+      langtou-nacos-dev:
+        condition: service_healthy
+      langtou-kafka-dev:
+        condition: service_healthy
+      langtou-redis-dev:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  langtou-message-service-dev:
+    image: ${DOCKER_REGISTRY}/${DOCKER_NAMESPACE}/message-service:${IMAGE_TAG}
+    container_name: langtou-message-service-dev
+    restart: unless-stopped
+    environment:
+      - SPRING_PROFILES_ACTIVE=dev
+      - NACOS_SERVER_ADDR=langtou-nacos-dev:8848
+      - MYSQL_HOST=langtou-mysql-dev
+      - MYSQL_PORT=3306
+      - MYSQL_DATABASE=${MYSQL_DATABASE}
+      - MYSQL_USER=${MYSQL_USER}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+      - REDIS_HOST=langtou-redis-dev
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - KAFKA_BOOTSTRAP_SERVERS=langtou-kafka-dev:9092
+      - JVM_OPTS=-Xms256m -Xmx512m -XX:+UseG1GC
+      - TZ=${TZ}
+    ports:
+      - "${MESSAGE_SERVICE_PORT}:8080"
+    networks:
+      - langtou-dev-network
+    depends_on:
+      langtou-mysql-dev:
+        condition: service_healthy
+      langtou-nacos-dev:
+        condition: service_healthy
+      langtou-kafka-dev:
+        condition: service_healthy
+      langtou-redis-dev:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # ==========================================
+  # Python 推荐服务 (开发版)
+  # ==========================================
+  langtou-recommendation-service-dev:
+    image: ${DOCKER_REGISTRY}/${DOCKER_NAMESPACE}/recommendation-service:${IMAGE_TAG}
+    container_name: langtou-recommendation-service-dev
+    restart: unless-stopped
+    environment:
+      - REDIS_HOST=langtou-redis-dev
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - ES_HOST=langtou-elasticsearch-dev
+      - ES_PORT=9200
+      - TZ=${TZ}
+    ports:
+      - "${RECOMMENDATION_PORT:-8000}:8000"
+    networks:
+      - langtou-dev-network
+    depends_on:
+      langtou-elasticsearch-dev:
+        condition: service_healthy
+      langtou-redis-dev:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # ==========================================
+  # Prometheus (可选, 开发环境默认不启用)
+  # 使用: docker compose -f docker-compose.dev.yml --profile monitoring up -d
+  # ==========================================
+  langtou-prometheus-dev:
+    image: prom/prometheus:v2.48.0
+    container_name: langtou-prometheus-dev
+    restart: unless-stopped
+    profiles:
+      - monitoring
+    ports:
+      - "${PROMETHEUS_PORT}:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    networks:
+      - langtou-dev-network
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+
+  # ==========================================
+  # Grafana (可选, 开发环境默认不启用)
+  # ==========================================
+  langtou-grafana-dev:
+    image: grafana/grafana:10.2.0
+    container_name: langtou-grafana-dev
+    restart: unless-stopped
+    profiles:
+      - monitoring
+    ports:
+      - "${GRAFANA_PORT}:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD}
+      - TZ=${TZ}
+    volumes:
+      - ./monitoring/grafana-dashboard.json:/var/lib/grafana/dashboards/langtou-dashboard.json:ro
+      - ./monitoring/grafana-provisioning:/etc/grafana/provisioning:ro
+    networks:
+      - langtou-dev-network
+    depends_on:
+      - langtou-prometheus-dev

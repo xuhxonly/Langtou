@@ -1,0 +1,223 @@
+# ==========================================
+# Langtou 社交内容社区 APP - ConfigMap (通用配置)
+# ==========================================
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: langtou-common-config
+  namespace: langtou
+data:
+  # 应用配置
+  application.yml: |
+    server:
+      port: 8080
+      compression:
+        enabled: true
+    
+    spring:
+      profiles:
+        active: k8s
+      jackson:
+        date-format: yyyy-MM-dd HH:mm:ss
+        time-zone: Asia/Shanghai
+      servlet:
+        multipart:
+          max-file-size: 50MB
+          max-request-size: 100MB
+    
+    # 日志配置
+    logging:
+      level:
+        root: INFO
+        com.langtou: DEBUG
+      pattern:
+        console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{50} - %msg%n"
+    
+    # Actuator配置
+    management:
+      endpoints:
+        web:
+          exposure:
+            include: health,info,metrics,prometheus
+      endpoint:
+        health:
+          show-details: always
+      metrics:
+        tags:
+          application: ${spring.application.name}
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: langtou-gateway-config
+  namespace: langtou
+data:
+  application-k8s.yml: |
+    server:
+      port: 8080
+    
+    spring:
+      application:
+        name: gateway-service
+      cloud:
+        gateway:
+          discovery:
+            locator:
+              enabled: true
+              lower-case-service-id: true
+          routes:
+            - id: user-service
+              uri: lb://user-service
+              predicates:
+                - Path=/api/user/**
+              filters:
+                - StripPrefix=1
+            - id: content-service
+              uri: lb://content-service
+              predicates:
+                - Path=/api/content/**
+              filters:
+                - StripPrefix=1
+            - id: interact-service
+              uri: lb://interact-service
+              predicates:
+                - Path=/api/interact/**
+              filters:
+                - StripPrefix=1
+            - id: message-service
+              uri: lb://message-service
+              predicates:
+                - Path=/api/message/**
+              filters:
+                - StripPrefix=1
+          globalcors:
+            cors-configurations:
+              '[/**]':
+                allowedOrigins: "*"
+                allowedMethods: "*"
+                allowedHeaders: "*"
+                allowCredentials: true
+    
+    # Nacos配置
+    nacos:
+      discovery:
+        server-addr: nacos.langtou-infra.svc.cluster.local:8848
+        namespace: langtou
+        group: DEFAULT_GROUP
+      config:
+        server-addr: nacos.langtou-infra.svc.cluster.local:8848
+        namespace: langtou
+        group: DEFAULT_GROUP
+        file-extension: yml
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: langtou-service-config
+  namespace: langtou
+data:
+  # 数据库配置
+  mysql-host: "mysql-master.langtou-infra.svc.cluster.local"
+  mysql-port: "3306"
+  mysql-database: "langtou"
+  
+  # Redis配置
+  redis-host: "redis-cluster.langtou-infra.svc.cluster.local"
+  redis-port: "6379"
+  
+  # Kafka配置
+  kafka-bootstrap-servers: "kafka.langtou-infra.svc.cluster.local:9092"
+  
+  # Elasticsearch配置
+  es-host: "elasticsearch.langtou-infra.svc.cluster.local"
+  es-port: "9200"
+  
+  # Nacos配置
+  nacos-server-addr: "nacos.langtou-infra.svc.cluster.local:8848"
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: langtou-nginx-config
+  namespace: langtou
+data:
+  nginx.conf: |
+    user nginx;
+    worker_processes auto;
+    error_log /var/log/nginx/error.log warn;
+    pid /var/run/nginx.pid;
+
+    events {
+        worker_connections 1024;
+    }
+
+    http {
+        include /etc/nginx/mime.types;
+        default_type application/octet-stream;
+
+        log_format main '$remote_addr - $remote_user [$time_local] "$request" '
+                        '$status $body_bytes_sent "$http_referer" '
+                        '"$http_user_agent" "$http_x_forwarded_for"';
+
+        access_log /var/log/nginx/access.log main;
+
+        sendfile on;
+        tcp_nopush on;
+        tcp_nodelay on;
+        keepalive_timeout 65;
+        types_hash_max_size 2048;
+
+        # Gzip压缩
+        gzip on;
+        gzip_vary on;
+        gzip_min_length 1024;
+        gzip_types text/plain text/css application/json application/javascript text/xml application/xml application/xml+rss text/javascript;
+
+        # 上游服务
+        upstream gateway {
+            server gateway:8080;
+        }
+
+        server {
+            listen 80;
+            server_name _;
+
+            # 健康检查
+            location /health {
+                access_log off;
+                return 200 "healthy\n";
+                add_header Content-Type text/plain;
+            }
+
+            # API代理
+            location /api/ {
+                proxy_pass http://gateway/;
+                proxy_set_header Host $host;
+                proxy_set_header X-Real-IP $remote_addr;
+                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                proxy_set_header X-Forwarded-Proto $scheme;
+                proxy_connect_timeout 30s;
+                proxy_send_timeout 30s;
+                proxy_read_timeout 30s;
+            }
+
+            # 静态资源
+            location /static/ {
+                alias /usr/share/nginx/html/static/;
+                expires 30d;
+                add_header Cache-Control "public, immutable";
+            }
+
+            # 前端H5
+            location / {
+                root /usr/share/nginx/html/h5;
+                try_files $uri $uri/ /index.html;
+                expires -1;
+            }
+        }
+    }

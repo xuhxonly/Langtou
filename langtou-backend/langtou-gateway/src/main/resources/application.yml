@@ -1,0 +1,128 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: langtou-gateway
+  cloud:
+    gateway:
+      discovery:
+        locator:
+          enabled: false
+          lower-case-service-id: true
+      routes:
+        - id: langtou-user-service-auth
+          uri: lb://langtou-user-service
+          predicates:
+            - Path=/api/v1/auth/**
+          filters:
+            - StripPrefix=2
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 100
+                redis-rate-limiter.burstCapacity: 200
+                key-resolver: "#{@ipKeyResolver}"
+
+        - id: langtou-user-service-users
+          uri: lb://langtou-user-service
+          predicates:
+            - Path=/api/v1/users/**
+          filters:
+            - StripPrefix=2
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 100
+                redis-rate-limiter.burstCapacity: 200
+                key-resolver: "#{@ipKeyResolver}"
+
+        - id: langtou-content-service-notes
+          uri: lb://langtou-content-service
+          predicates:
+            - Path=/api/v1/notes/**
+          filters:
+            - StripPrefix=2
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 200
+                redis-rate-limiter.burstCapacity: 400
+                key-resolver: "#{@ipKeyResolver}"
+
+        - id: langtou-content-service-tags
+          uri: lb://langtou-content-service
+          predicates:
+            - Path=/api/v1/tags/**
+          filters:
+            - StripPrefix=2
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 200
+                redis-rate-limiter.burstCapacity: 400
+                key-resolver: "#{@ipKeyResolver}"
+
+        - id: langtou-content-service-search
+          uri: lb://langtou-content-service
+          predicates:
+            - Path=/api/v1/search
+          filters:
+            - StripPrefix=2
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 200
+                redis-rate-limiter.burstCapacity: 400
+                key-resolver: "#{@ipKeyResolver}"
+
+        - id: langtou-interact-service
+          uri: lb://langtou-interact-service
+          predicates:
+            - Path=/api/v1/notes/**/like,/api/v1/notes/**/collect,/api/v1/notes/**/comments,/api/v1/users/me/collections
+          filters:
+            - StripPrefix=2
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 300
+                redis-rate-limiter.burstCapacity: 600
+                key-resolver: "#{@ipKeyResolver}"
+
+        - id: langtou-message-service-messages
+          uri: lb://langtou-message-service
+          predicates:
+            - Path=/api/v1/messages/**
+          filters:
+            - StripPrefix=2
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 100
+                redis-rate-limiter.burstCapacity: 200
+                key-resolver: "#{@ipKeyResolver}"
+
+        - id: langtou-message-service-notifications
+          uri: lb://langtou-message-service
+          predicates:
+            - Path=/api/v1/notifications/**
+          filters:
+            - StripPrefix=2
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 100
+                redis-rate-limiter.burstCapacity: 200
+                key-resolver: "#{@ipKeyResolver}"
+
+      globalcors:
+        cors-configurations:
+          '[/**]':
+            allowedOrigins: "*"
+            allowedMethods: "*"
+            allowedHeaders: "*"
+            allowCredentials: false
+
+spring:
+  cloud:
+    nacos:
+      discovery:
+        server-addr: ${NACOS_SERVER:localhost:8848}
+        namespace: ${NACOS_NAMESPACE:}
+        group: DEFAULT_GROUP
+
+logging:
+  level:
+    org.springframework.cloud.gateway: DEBUG

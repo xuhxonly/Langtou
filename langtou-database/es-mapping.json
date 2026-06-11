@@ -1,0 +1,194 @@
+{
+  "settings": {
+    "index": {
+      "number_of_shards": 5,
+      "number_of_replicas": 1,
+      "refresh_interval": "5s",
+      "max_result_window": 10000
+    },
+    "analysis": {
+      "analyzer": {
+        "langtou_ik_max_word": {
+          "type": "custom",
+          "tokenizer": "ik_max_word",
+          "filter": [
+            "lowercase",
+            "asciifolding"
+          ]
+        },
+        "langtou_ik_smart": {
+          "type": "custom",
+          "tokenizer": "ik_smart",
+          "filter": [
+            "lowercase",
+            "asciifolding"
+          ]
+        },
+        "langtou_pinyin": {
+          "type": "custom",
+          "tokenizer": "pinyin_tokenizer",
+          "filter": [
+            "lowercase"
+          ]
+        }
+      },
+      "tokenizer": {
+        "pinyin_tokenizer": {
+          "type": "pinyin",
+          "keep_separate_first_letter": false,
+          "keep_full_pinyin": true,
+          "keep_original": true,
+          "limit_first_letter_length": 16,
+          "lowercase": true,
+          "remove_duplicated_term": true
+        }
+      }
+    }
+  },
+  "mappings": {
+    "dynamic": "strict",
+    "properties": {
+      "id": {
+        "type": "long",
+        "index": false
+      },
+      "user_id": {
+        "type": "long",
+        "index": true
+      },
+      "username": {
+        "type": "keyword",
+        "index": true
+      },
+      "nickname": {
+        "type": "text",
+        "analyzer": "langtou_ik_max_word",
+        "search_analyzer": "langtou_ik_smart",
+        "fields": {
+          "keyword": {
+            "type": "keyword",
+            "ignore_above": 64
+          }
+        }
+      },
+      "title": {
+        "type": "text",
+        "analyzer": "langtou_ik_max_word",
+        "search_analyzer": "langtou_ik_smart",
+        "fields": {
+          "keyword": {
+            "type": "keyword",
+            "ignore_above": 256
+          },
+          "pinyin": {
+            "type": "text",
+            "analyzer": "langtou_pinyin",
+            "search_analyzer": "langtou_pinyin"
+          }
+        },
+        "boost": 3.0
+      },
+      "content": {
+        "type": "text",
+        "analyzer": "langtou_ik_max_word",
+        "search_analyzer": "langtou_ik_smart",
+        "fields": {
+          "keyword": {
+            "type": "keyword",
+            "ignore_above": 512
+          }
+        },
+        "boost": 2.0
+      },
+      "content_summary": {
+        "type": "text",
+        "analyzer": "langtou_ik_smart",
+        "search_analyzer": "langtou_ik_smart"
+      },
+      "tags": {
+        "type": "keyword",
+        "index": true,
+        "fields": {
+          "text": {
+            "type": "text",
+            "analyzer": "langtou_ik_max_word",
+            "search_analyzer": "langtou_ik_smart"
+          }
+        }
+      },
+      "cover_url": {
+        "type": "keyword",
+        "index": false
+      },
+      "video_url": {
+        "type": "keyword",
+        "index": false
+      },
+      "has_video": {
+        "type": "boolean",
+        "index": true
+      },
+      "location": {
+        "type": "keyword",
+        "index": true,
+        "fields": {
+          "text": {
+            "type": "text",
+            "analyzer": "langtou_ik_max_word",
+            "search_analyzer": "langtou_ik_smart"
+          }
+        }
+      },
+      "images": {
+        "type": "keyword",
+        "index": false
+      },
+      "like_count": {
+        "type": "integer",
+        "index": true
+      },
+      "comment_count": {
+        "type": "integer",
+        "index": true
+      },
+      "collect_count": {
+        "type": "integer",
+        "index": true
+      },
+      "share_count": {
+        "type": "integer",
+        "index": true
+      },
+      "view_count": {
+        "type": "integer",
+        "index": true
+      },
+      "hot_score": {
+        "type": "float",
+        "index": true
+      },
+      "status": {
+        "type": "byte",
+        "index": true
+      },
+      "created_at": {
+        "type": "date",
+        "format": "strict_date_optional_time||epoch_millis||yyyy-MM-dd HH:mm:ss.SSS",
+        "index": true
+      },
+      "updated_at": {
+        "type": "date",
+        "format": "strict_date_optional_time||epoch_millis||yyyy-MM-dd HH:mm:ss.SSS",
+        "index": false
+      },
+      "suggest": {
+        "type": "completion",
+        "analyzer": "langtou_ik_max_word",
+        "search_analyzer": "langtou_ik_max_word",
+        "preserve_separators": true,
+        "preserve_position_increments": true,
+        "max_input_length": 50
+      }
+    }
+  }
+}

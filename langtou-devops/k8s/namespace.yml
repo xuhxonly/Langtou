@@ -1,0 +1,33 @@
+# ==========================================
+# Langtou 社交内容社区 APP - Kubernetes Namespace
+# ==========================================
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: langtou
+  labels:
+    app: langtou
+    environment: production
+    managed-by: kubectl
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: langtou-infra
+  labels:
+    app: langtou
+    type: infrastructure
+    managed-by: kubectl
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: langtou-monitoring
+  labels:
+    app: langtou
+    type: monitoring
+    managed-by: kubectl

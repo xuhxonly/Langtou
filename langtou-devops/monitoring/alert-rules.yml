@@ -1,0 +1,278 @@
+# ==========================================
+# Langtou 社交内容社区 APP - Prometheus 告警规则
+# ==========================================
+
+groups:
+  # ==========================================
+  # 微服务告警
+  # ==========================================
+  - name: langtou-services
+    interval: 15s
+    rules:
+      # 服务宕机
+      - alert: ServiceDown
+        expr: up{job=~"langtou-services|kubernetes-pods"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: "{{ $labels.service }}"
+        annotations:
+          summary: "服务 {{ $labels.service }} 宕机"
+          description: "服务 {{ $labels.service }} 在 {{ $labels.instance }} 上已经宕机超过1分钟"
+
+      # 高错误率
+      - alert: HighErrorRate
+        expr: |
+          sum(rate(http_server_requests_seconds_count{status=~"5.."}[5m])) by (service)
+          /
+          sum(rate(http_server_requests_seconds_count[5m])) by (service) * 100 > 5
+        for: 2m
+        labels:
+          severity: critical
+          service: "{{ $labels.service }}"
+        annotations:
+          summary: "{{ $labels.service }} 错误率过高"
+          description: "{{ $labels.service }} 的错误率超过 5% (当前值: {{ $value }}%)"
+
+      # 响应时间过长
+      - alert: HighLatency
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(http_server_requests_seconds_bucket[5m])) by (service, le)
+          ) > 1
+        for: 3m
+        labels:
+          severity: warning
+          service: "{{ $labels.service }}"
+        annotations:
+          summary: "{{ $labels.service }} P95响应时间过长"
+          description: "{{ $labels.service }} 的P95响应时间超过1秒 (当前值: {{ $value }}s)"
+
+      # JVM堆内存使用率过高
+      - alert: JvmHighHeapUsage
+        expr: |
+          jvm_memory_used_bytes{area="heap"} / jvm_memory_max_bytes{area="heap"} * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+          service: "{{ $labels.application }}"
+        annotations:
+          summary: "{{ $labels.application }} JVM堆内存使用率过高"
+          description: "{{ $labels.application }} 的JVM堆内存使用率超过80% (当前值: {{ $value }}%)"
+
+      # JVM GC时间过长
+      - alert: JvmLongGcPause
+        expr: |
+          increase(jvm_gc_pause_seconds_sum[5m]) / increase(jvm_gc_pause_seconds_count[5m]) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+          service: "{{ $labels.application }}"
+        annotations:
+          summary: "{{ $labels.application }} GC停顿时间过长"
+          description: "{{ $labels.application }} 的平均GC停顿时间超过500ms"
+
+      # 数据库连接池耗尽
+      - alert: DatabaseConnectionPoolExhausted
+        expr: |
+          hikaricp_connections_active / hikaricp_connections_max * 100 > 90
+        for: 2m
+        labels:
+          severity: critical
+          service: "{{ $labels.application }}"
+        annotations:
+          summary: "{{ $labels.application }} 数据库连接池即将耗尽"
+          description: "{{ $labels.application }} 的数据库连接池使用率超过90%"
+
+  # ==========================================
+  # 基础设施告警
+  # ==========================================
+  - name: infrastructure
+    interval: 30s
+    rules:
+      # 节点CPU使用率过高
+      - alert: HighNodeCpuUsage
+        expr: |
+          100 - (avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+        for: 5m
+        labels:
+          severity: warning
+          service: node
+        annotations:
+          summary: "节点 {{ $labels.instance }} CPU使用率过高"
+          description: "节点 {{ $labels.instance }} 的CPU使用率超过80% (当前值: {{ $value }}%)"
+
+      # 节点内存使用率过高
+      - alert: HighNodeMemoryUsage
+        expr: |
+          100 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes * 100) > 85
+        for: 5m
+        labels:
+          severity: warning
+          service: node
+        annotations:
+          summary: "节点 {{ $labels.instance }} 内存使用率过高"
+          description: "节点 {{ $labels.instance }} 的内存使用率超过85% (当前值: {{ $value }}%)"
+
+      # 磁盘空间不足
+      - alert: LowDiskSpace
+        expr: |
+          (node_filesystem_avail_bytes / node_filesystem_size_bytes * 100) < 10
+        for: 5m
+        labels:
+          severity: critical
+          service: node
+        annotations:
+          summary: "节点 {{ $labels.instance }} 磁盘空间不足"
+          description: "节点 {{ $labels.instance }} 的 {{ $labels.mountpoint }} 磁盘空间剩余不足10%"
+
+      # MySQL连接数过高
+      - alert: MysqlHighConnections
+        expr: |
+          mysql_global_status_threads_connected / mysql_global_variables_max_connections * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+          service: mysql
+        annotations:
+          summary: "MySQL连接数过高"
+          description: "MySQL的连接数使用率超过80% (当前值: {{ $value }}%)"
+
+      # MySQL慢查询过多
+      - alert: MysqlSlowQueries
+        expr: |
+          rate(mysql_global_status_slow_queries[5m]) > 10
+        for: 5m
+        labels:
+          severity: warning
+          service: mysql
+        annotations:
+          summary: "MySQL慢查询过多"
+          description: "MySQL每秒慢查询数量超过10个"
+
+      # Redis内存使用率过高
+      - alert: RedisHighMemoryUsage
+        expr: |
+          redis_memory_used_bytes / redis_memory_max_bytes * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+          service: redis
+        annotations:
+          summary: "Redis内存使用率过高"
+          description: "Redis的内存使用率超过80% (当前值: {{ $value }}%)"
+
+      # Redis连接数过高
+      - alert: RedisHighConnections
+        expr: |
+          redis_connected_clients > 500
+        for: 5m
+        labels:
+          severity: warning
+          service: redis
+        annotations:
+          summary: "Redis连接数过高"
+          description: "Redis的连接数超过500 (当前值: {{ $value }})"
+
+      # Kafka消费者滞后
+      - alert: KafkaConsumerLag
+        expr: |
+          kafka_consumer_group_lag > 1000
+        for: 5m
+        labels:
+          severity: warning
+          service: kafka
+        annotations:
+          summary: "Kafka消费者滞后严重"
+          description: "Kafka消费者组 {{ $labels.group }} 在主题 {{ $labels.topic }} 上的滞后超过1000"
+
+      # Elasticsearch集群状态异常
+      - alert: ElasticsearchClusterRed
+        expr: |
+          elasticsearch_cluster_health_status{color="red"} == 1
+        for: 1m
+        labels:
+          severity: critical
+          service: elasticsearch
+        annotations:
+          summary: "Elasticsearch集群状态为Red"
+          description: "Elasticsearch集群状态异常,部分主分片不可用"
+
+      - alert: ElasticsearchClusterYellow
+        expr: |
+          elasticsearch_cluster_health_status{color="yellow"} == 1
+        for: 10m
+        labels:
+          severity: warning
+          service: elasticsearch
+        annotations:
+          summary: "Elasticsearch集群状态为Yellow"
+          description: "Elasticsearch集群状态为Yellow,部分副本分片未分配"
+
+      # Nginx错误率过高
+      - alert: NginxHighErrorRate
+        expr: |
+          sum(rate(nginx_http_requests_total{status=~"5.."}[5m])) by (instance)
+          /
+          sum(rate(nginx_http_requests_total[5m])) by (instance) * 100 > 5
+        for: 3m
+        labels:
+          severity: warning
+          service: nginx
+        annotations:
+          summary: "Nginx错误率过高"
+          description: "Nginx的错误率超过5% (当前值: {{ $value }}%)"
+
+  # ==========================================
+  # Kubernetes告警
+  # ==========================================
+  - name: kubernetes
+    interval: 30s
+    rules:
+      # Pod重启次数过多
+      - alert: PodCrashLooping
+        expr: |
+          rate(kube_pod_container_status_restarts_total[15m]) > 0
+        for: 5m
+        labels:
+          severity: critical
+          service: kubernetes
+        annotations:
+          summary: "Pod {{ $labels.pod }} 频繁重启"
+          description: "Pod {{ $labels.pod }} 在命名空间 {{ $labels.namespace }} 中频繁重启"
+
+      # Pod处于Pending状态时间过长
+      - alert: PodPending
+        expr: |
+          kube_pod_status_phase{phase="Pending"} == 1
+        for: 10m
+        labels:
+          severity: warning
+          service: kubernetes
+        annotations:
+          summary: "Pod {{ $labels.pod }} 处于Pending状态"
+          description: "Pod {{ $labels.pod }} 在命名空间 {{ $labels.namespace }} 中处于Pending状态超过10分钟"
+
+      # Pod内存使用率过高
+      - alert: PodHighMemoryUsage
+        expr: |
+          container_memory_working_set_bytes / container_spec_memory_limit_bytes * 100 > 90
+        for: 5m
+        labels:
+          severity: warning
+          service: kubernetes
+        annotations:
+          summary: "Pod {{ $labels.pod }} 内存使用率过高"
+          description: "Pod {{ $labels.pod }} 的内存使用率超过90%"
+
+      # Pod CPU使用率过高
+      - alert: PodHighCpuUsage
+        expr: |
+          rate(container_cpu_usage_seconds_total[5m]) / container_spec_cpu_quota * 100 > 90
+        for: 5m
+        labels:
+          severity: warning
+          service: kubernetes
+        annotations:
+          summary: "Pod {{ $labels.pod }} CPU使用率过高"
+          description: "Pod {{ $labels.pod }} 的CPU使用率超过90%"
