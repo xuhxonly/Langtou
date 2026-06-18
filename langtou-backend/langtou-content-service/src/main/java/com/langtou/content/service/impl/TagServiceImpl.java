@@ -23,8 +23,7 @@ import org.springframework.util.CollectionUtils;
 import org.springframework.util.StringUtils;
 
 import java.time.Duration;
-import java.util.Collections;
-import java.util.List;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -161,6 +160,47 @@ public class TagServiceImpl implements TagService {
         tagMapper.insert(tag);
         log.info("标签创建成功: name={}", tagName);
         return tag;
+    }
+
+    @Override
+    public List<Long> getTagIdsByNoteId(Long noteId) {
+        return noteTagMapper.selectTagIdsByNoteId(noteId);
+    }
+
+    @Override
+    public List<Long> getNoteIdsByTagId(Long tagId) {
+        return noteTagMapper.selectNoteIdsByTagId(tagId);
+    }
+
+    @Override
+    public Map<Long, List<Tag>> getTagsByNoteIds(List<Long> noteIds) {
+        if (CollectionUtils.isEmpty(noteIds)) {
+            return Collections.emptyMap();
+        }
+        // 批量查询 note_tag 关联记录
+        List<NoteTag> noteTags = noteTagMapper.selectByNoteIds(noteIds);
+        if (CollectionUtils.isEmpty(noteTags)) {
+            return Collections.emptyMap();
+        }
+        // 收集所有 tagId
+        Set<Long> allTagIds = noteTags.stream()
+                .map(NoteTag::getTagId)
+                .collect(Collectors.toSet());
+        // 批量查询标签信息
+        Map<Long, Tag> tagMap = new HashMap<>();
+        List<Tag> tags = tagMapper.selectBatchIds(allTagIds);
+        for (Tag tag : tags) {
+            tagMap.put(tag.getId(), tag);
+        }
+        // 按 noteId 分组
+        Map<Long, List<Tag>> result = new HashMap<>();
+        for (NoteTag nt : noteTags) {
+            Tag tag = tagMap.get(nt.getTagId());
+            if (tag != null) {
+                result.computeIfAbsent(nt.getNoteId(), k -> new ArrayList<>()).add(tag);
+            }
+        }
+        return result;
     }
 
     private ContentDTO convertToDTO(Content content) {

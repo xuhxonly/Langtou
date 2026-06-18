@@ -1,0 +1,35 @@
+# ============ 榔头(Langtou) JVM优化参数 ============
+# 适用于所有微服务（gateway/user/content/interact/message）
+
+# 堆内存配置：固定堆大小避免运行时扩缩容开销
+-Xms512m
+-Xmx512m
+
+# 使用G1垃圾收集器，适合低延迟应用
+-XX:+UseG1GC
+
+# GC最大停顿时间目标200ms
+-XX:MaxGCPauseMillis=200
+
+# OOM时自动生成Heap Dump，便于问题排查
+-XX:+HeapDumpOnOutOfMemoryError
+-XX:HeapDumpPath=/tmp/heapdump.hprof
+
+# 使用/dev/urandom作为随机数源，避免启动时阻塞
+-Djava.security.egd=file:/dev/./urandom
+
+# GC日志配置（Java 9+统一日志）
+-Xlog:gc*:file=/tmp/gc.log:time,uptime,level,tags:filecount=5,filesize=20m
+
+# 元空间初始大小和最大大小
+-XX:MetaspaceSize=256m
+-XX:MaxMetaspaceSize=512m
+
+# 线程栈大小
+-Xss256k
+
+# 优化字符串去重（Java 8u20+）
+-XX:+UseStringDeduplication
+
+# 禁用偏向锁定（Java 15+默认禁用，低延迟场景推荐）
+-XX:-UseBiasedLocking

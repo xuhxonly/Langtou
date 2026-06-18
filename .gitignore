@@ -1,0 +1,78 @@
+# ==================== 项目过程文件 / 临时文件 ====================
+# 上传目录（包含大文件 zip 包）
+.uploads/
+
+# 交付报告目录（HTML 交付物，包含 echarts.min.js、字体等）
+langtou-final-delivery/
+langtou-evaluation/
+langtou-xhs-gap-analysis/
+langtou-xiaohongshu-gap-analysis/
+
+# 团队输出产物
+langtou-team/dev-output/
+langtou-team/marketing-output/
+langtou-team/pm-output/
+langtou-team/qa-output/
+
+# 打包文件
+*.zip
+*.tar.gz
+*.rar
+
+# ==================== 构建产物 ====================
+# Java / Maven
+target/
+*.class
+*.jar
+*.war
+
+# Node.js / 前端
+node_modules/
+dist/
+build/
+.cache/
+.parcel-cache/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# 日志
+*.log
+logs/
+
+# 临时文件
+*.tmp
+*.temp
+*.bak
+*.backup
+*.old
+*.orig
+*~
+
+# ==================== IDE / 编辑器 ====================
+.idea/
+.vscode/
+*.swp
+*.swo
+.project
+.classpath
+.settings/
+.vscode/
+
+# ==================== 操作系统 ====================
+.DS_Store
+Thumbs.db
+desktop.ini
+$RECYCLE.BIN/
+
+# ==================== 环境配置 ====================
+.env.local
+.env.*.local
+
+# ==================== 数据库 ====================
+*.sql.bak
+*.dump

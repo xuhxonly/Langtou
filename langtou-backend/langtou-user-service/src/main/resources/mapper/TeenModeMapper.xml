@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.langtou.user.mapper.TeenModeMapper">
+
+    <!-- 更新当日使用时长（INSERT ON DUPLICATE KEY UPDATE） -->
+    <update id="updateDailyUsage">
+        INSERT INTO teen_mode_logs (user_id, usage_date, total_seconds, created_at, updated_at)
+        VALUES (#{userId}, #{usageDate}, #{seconds}, NOW(), NOW())
+        ON DUPLICATE KEY UPDATE total_seconds = total_seconds + #{seconds}, updated_at = NOW()
+    </update>
+
+</mapper>

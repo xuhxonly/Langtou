@@ -7,6 +7,7 @@ public interface CommonConstants {
 
     String REQUEST_USER_ID = "userId";
     String REQUEST_USERNAME = "username";
+    String REQUEST_USER_ROLE = "X-User-Role";
 
     String DEFAULT_AVATAR = "https://cdn.langtou.com/default-avatar.png";
 

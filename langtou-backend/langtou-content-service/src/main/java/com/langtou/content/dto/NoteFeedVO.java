@@ -49,4 +49,11 @@ public class NoteFeedVO implements Serializable {
     private String authorNickname;
 
     private String authorAvatar;
+
+    // ===== LBS附近笔记距离信息 =====
+
+    /**
+     * 与查询位置的距离（米），仅附近笔记查询时返回
+     */
+    private Integer distance;
 }

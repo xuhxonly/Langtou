@@ -31,7 +31,7 @@ data:
     logging:
       level:
         root: INFO
-        com.langtou: DEBUG
+        com.langtou: INFO
       pattern:
         console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{50} - %msg%n"
     
@@ -96,7 +96,7 @@ data:
           globalcors:
             cors-configurations:
               '[/**]':
-                allowedOrigins: "*"
+                allowedOrigins: "https://www.langtou.com,https://admin.langtou.com,http://localhost:3000"
                 allowedMethods: "*"
                 allowedHeaders: "*"
                 allowCredentials: true

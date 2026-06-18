@@ -1,0 +1,299 @@
+# ==========================================
+# Langtou 社交内容社区 APP - Redis Cluster StatefulSet
+# ==========================================
+# 部署在 langtou-infra 命名空间
+# 3主3从 Redis Cluster (6节点)
+# ==========================================
+
+---
+# Redis Headless Service (用于StatefulSet稳定的网络标识)
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-cluster
+  namespace: langtou-infra
+  labels:
+    app: redis-cluster
+    tier: cache
+spec:
+  type: ClusterIP
+  clusterIP: None  # Headless Service
+  selector:
+    app: redis-cluster
+  ports:
+    - port: 6379
+      targetPort: 6379
+      name: redis
+    - port: 16379
+      targetPort: 16379
+      name: redis-cluster
+
+---
+# Redis 集群初始化 Job 使用的Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-cluster-access
+  namespace: langtou-infra
+  labels:
+    app: redis-cluster
+    tier: cache
+spec:
+  type: ClusterIP
+  selector:
+    app: redis-cluster
+  ports:
+    - port: 6379
+      targetPort: 6379
+      name: redis
+
+---
+# Redis 配置文件 ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: redis-cluster-config
+  namespace: langtou-infra
+  labels:
+    app: redis-cluster
+    tier: cache
+data:
+  redis-cluster.conf: |
+    # Redis Cluster 配置
+    cluster-enabled yes
+    cluster-config-file nodes.conf
+    cluster-node-timeout 5000
+    cluster-require-full-coverage no
+    cluster-migration-barrier 1
+    
+    # 持久化配置
+    appendonly yes
+    appendfsync everysec
+    no-appendfsync-on-rewrite no
+    auto-aof-rewrite-percentage 100
+    auto-aof-rewrite-min-size 64mb
+    
+    # RDB配置
+    save 900 1
+    save 300 10
+    save 60 10000
+    
+    # 内存配置
+    maxmemory 512mb
+    maxmemory-policy allkeys-lru
+    
+    # 性能优化
+    tcp-keepalive 300
+    timeout 0
+    tcp-backlog 511
+    
+    # 日志
+    loglevel notice
+    
+    # 安全
+    protected-mode no
+
+---
+# Redis Cluster StatefulSet
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: redis-cluster
+  namespace: langtou-infra
+  labels:
+    app: redis-cluster
+    tier: cache
+spec:
+  serviceName: redis-cluster
+  replicas: 6  # 3主3从
+  selector:
+    matchLabels:
+      app: redis-cluster
+      tier: cache
+  template:
+    metadata:
+      labels:
+        app: redis-cluster
+        tier: cache
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9121"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: redis-sa
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app
+                      operator: In
+                      values:
+                        - redis-cluster
+                topologyKey: kubernetes.io/hostname
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 6379
+              name: redis
+            - containerPort: 16379
+              name: redis-cluster
+          env:
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: redis-secret
+                  key: redis-password
+          command:
+            - redis-server
+            - /usr/local/etc/redis/redis.conf
+            - --port
+            - "6379"
+            - --cluster-enabled
+            - "yes"
+            - --cluster-config-file
+            - nodes.conf
+            - --cluster-node-timeout
+            - "5000"
+            - --appendonly
+            - "yes"
+            - --requirepass
+            - $(REDIS_PASSWORD)
+            - --masterauth
+            - $(REDIS_PASSWORD)
+            - --bind
+            - "0.0.0.0"
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "1Gi"
+              cpu: "1000m"
+          livenessProbe:
+            exec:
+              command:
+                - redis-cli
+                - -a
+                - $(REDIS_PASSWORD)
+                - ping
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 5
+          readinessProbe:
+            exec:
+              command:
+                - redis-cli
+                - -a
+                - $(REDIS_PASSWORD)
+                - ping
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          volumeMounts:
+            - name: redis-data
+              mountPath: /data
+            - name: redis-config
+              mountPath: /usr/local/etc/redis
+      volumes:
+        - name: redis-config
+          configMap:
+            name: redis-cluster-config
+            items:
+              - key: redis-cluster.conf
+                path: redis.conf
+  volumeClaimTemplates:
+    - metadata:
+        name: redis-data
+        labels:
+          app: redis-cluster
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: standard
+        resources:
+          requests:
+            storage: 5Gi
+
+---
+# Redis 集群初始化 Job
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: redis-cluster-init
+  namespace: langtou-infra
+  labels:
+    app: redis-cluster
+    tier: cache
+spec:
+  template:
+    spec:
+      serviceAccountName: redis-sa
+      restartPolicy: OnFailure
+      containers:
+        - name: redis-cluster-init
+          image: redis:7-alpine
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: redis-secret
+                  key: redis-password
+          command:
+            - /bin/sh
+            - -c
+            - |
+              echo "Waiting for all Redis nodes to be ready..."
+              sleep 10
+              
+              # 等待所有节点就绪
+              for i in $(seq 0 5); do
+                until redis-cli -h redis-cluster-${i}.redis-cluster -a ${REDIS_PASSWORD} ping | grep -q PONG; do
+                  echo "Waiting for redis-cluster-${i}..."
+                  sleep 2
+                done
+              done
+              
+              echo "All Redis nodes are ready, creating cluster..."
+              
+              # 构建节点列表
+              NODES=""
+              for i in $(seq 0 5); do
+                NODES="${NODES} redis-cluster-${i}.redis-cluster:6379"
+              done
+              
+              # 创建集群 (3主3从)
+              redis-cli --cluster create ${NODES} \
+                --cluster-replicas 1 \
+                --cluster-yes \
+                -a ${REDIS_PASSWORD}
+              
+              echo "Redis Cluster initialized successfully!"
+              
+              # 验证集群状态
+              redis-cli -h redis-cluster-0.redis-cluster -a ${REDIS_PASSWORD} cluster info
+  backoffLimit: 5
+
+---
+# Redis Secret
+apiVersion: v1
+kind: Secret
+metadata:
+  name: redis-secret
+  namespace: langtou-infra
+  labels:
+    app: redis-cluster
+    tier: cache
+type: Opaque
+data:
+  # 请通过 kubectl create secret 动态创建，以下为占位符
+  # kubectl create secret generic redis-secret \
+  #   --from-literal=redis-password='<YOUR_PASSWORD>' \
+  #   --namespace=langtou-infra
+  redis-password: <BASE64_ENCODED_PASSWORD>

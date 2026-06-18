@@ -14,10 +14,12 @@ metadata:
     nginx.ingress.kubernetes.io/proxy-connect-timeout: "30"
     nginx.ingress.kubernetes.io/proxy-send-timeout: "30"
     nginx.ingress.kubernetes.io/proxy-read-timeout: "30"
-    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
     nginx.ingress.kubernetes.io/use-regex: "true"
-    nginx.ingress.kubernetes.io/enable-cors: "true"
-    nginx.ingress.kubernetes.io/cors-allow-origin: "*"
+    # CORS 已移除全局开放配置，改为在 Gateway 层按业务需求精确控制
+    # 如需为特定域名开启 CORS，请在 Gateway 服务中配置，或在 Ingress 中添加具体 host 的注解
+    # nginx.ingress.kubernetes.io/enable-cors: "true"
+    # nginx.ingress.kubernetes.io/cors-allow-origin: "https://www.langtou.com"
     nginx.ingress.kubernetes.io/cors-allow-methods: "PUT, GET, POST, DELETE, PATCH, OPTIONS"
     nginx.ingress.kubernetes.io/cors-allow-headers: "Authorization,Content-Type,Accept,Origin,User-Agent,Cache-Control,Keep-Alive,X-Requested-With"
     nginx.ingress.kubernetes.io/limit-rps: "100"
@@ -96,12 +98,11 @@ spec:
                 name: kibana
                 port:
                   number: 5601
-  # TLS配置 (可选)
-  # tls:
-  #   - hosts:
-  #       - api.langtou.com
-  #       - www.langtou.com
-  #     secretName: langtou-tls-secret
+  tls:
+    - hosts:
+        - api.langtou.com
+        - www.langtou.com
+      secretName: langtou-tls-secret
 
 ---
 apiVersion: networking.k8s.io/v1

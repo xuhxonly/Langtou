@@ -288,6 +288,254 @@
       "gridPos": { "h": 1, "w": 24, "x": 0, "y": 16 },
       "id": 9,
       "panels": [],
+      "title": "业务指标",
+      "type": "row"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 1000 },
+              { "color": "green", "value": 5000 }
+            ]
+          },
+          "unit": "short"
+        }
+      },
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 17 },
+      "id": 20,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "pluginVersion": "10.2.0",
+      "targets": [
+        {
+          "expr": "sum(increase(langtou_user_login_total[1d]))",
+          "legendFormat": "今日DAU",
+          "refId": "A"
+        }
+      ],
+      "title": "DAU (日活跃用户)",
+      "type": "stat"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": { "type": "linear" },
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": { "group": "A", "mode": "none" },
+            "thresholdsStyle": { "mode": "off" }
+          },
+          "mappings": [],
+          "unit": "short"
+        }
+      },
+      "gridPos": { "h": 6, "w": 9, "x": 6, "y": 17 },
+      "id": 21,
+      "options": {
+        "legend": { "calcs": [], "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "single" }
+      },
+      "targets": [
+        {
+          "expr": "sum by (service) (increase(langtou_user_login_total[1h]))",
+          "legendFormat": "每小时登录数",
+          "refId": "A"
+        }
+      ],
+      "title": "DAU 趋势",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": { "type": "linear" },
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": { "group": "A", "mode": "none" },
+            "thresholdsStyle": { "mode": "off" }
+          },
+          "mappings": [],
+          "unit": "short"
+        }
+      },
+      "gridPos": { "h": 6, "w": 9, "x": 15, "y": 17 },
+      "id": 22,
+      "options": {
+        "legend": { "calcs": [], "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "single" }
+      },
+      "targets": [
+        {
+          "expr": "sum(increase(langtou_content_publish_total[1h]))",
+          "legendFormat": "每小时发布量",
+          "refId": "A"
+        }
+      ],
+      "title": "内容发布量",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 0.05 },
+              { "color": "green", "value": 0.15 }
+            ]
+          },
+          "unit": "percentunit"
+        }
+      },
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 23 },
+      "id": 23,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "pluginVersion": "10.2.0",
+      "targets": [
+        {
+          "expr": "sum(increase(langtou_interaction_total[1h])) / sum(increase(langtou_content_view_total[1h]))",
+          "legendFormat": "互动率",
+          "refId": "A"
+        }
+      ],
+      "title": "互动率",
+      "type": "stat"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": { "type": "linear" },
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": { "group": "A", "mode": "none" },
+            "thresholdsStyle": { "mode": "off" }
+          },
+          "mappings": [],
+          "unit": "percentunit"
+        }
+      },
+      "gridPos": { "h": 6, "w": 9, "x": 6, "y": 23 },
+      "id": 24,
+      "options": {
+        "legend": { "calcs": [], "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "single" }
+      },
+      "targets": [
+        {
+          "expr": "sum(increase(langtou_interaction_total[1h])) / sum(increase(langtou_content_view_total[1h]))",
+          "legendFormat": "互动率趋势",
+          "refId": "A"
+        }
+      ],
+      "title": "互动率趋势",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 0.2 },
+              { "color": "green", "value": 0.4 }
+            ]
+          },
+          "unit": "percentunit"
+        }
+      },
+      "gridPos": { "h": 6, "w": 9, "x": 15, "y": 23 },
+      "id": 25,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "pluginVersion": "10.2.0",
+      "targets": [
+        {
+          "expr": "sum(increase(langtou_user_return_next_day_total[1d])) / sum(increase(langtou_user_login_total[1d] offset 1d))",
+          "legendFormat": "次日留存率",
+          "refId": "A"
+        }
+      ],
+      "title": "用户留存率",
+      "type": "stat"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 29 },
+      "id": 30,
+      "panels": [],
       "title": "基础设施",
       "type": "row"
     },
@@ -321,7 +569,7 @@
           "unit": "percent"
         }
       },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 17 },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 30 },
       "id": 10,
       "options": {
         "legend": { "calcs": [], "displayMode": "list", "placement": "bottom" },
@@ -367,7 +615,7 @@
           "unit": "percent"
         }
       },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 17 },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 30 },
       "id": 11,
       "options": {
         "legend": { "calcs": [], "displayMode": "list", "placement": "bottom" },

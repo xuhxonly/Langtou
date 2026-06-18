@@ -12,37 +12,42 @@ import org.springframework.http.MediaType;
 import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.http.server.reactive.ServerHttpResponse;
 import org.springframework.stereotype.Component;
-import org.springframework.util.AntPathMatcher;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
 import java.nio.charset.StandardCharsets;
-import java.util.Arrays;
 import java.util.List;
+
+import org.springframework.http.HttpMethod;
 
 @Slf4j
 @Component
 public class JwtAuthFilter implements GlobalFilter, Ordered {
 
-    private final AntPathMatcher pathMatcher = new AntPathMatcher();
-
-    private static final List<String> WHITE_LIST = Arrays.asList(
-            "/api/v1/auth/login",
-            "/api/v1/auth/sms-login",
-            "/api/v1/auth/register",
-            "/api/v1/notes",
-            "/api/v1/notes/*/comments",
-            "/api/v1/search",
-            "/api/v1/tags/hot",
-            "/api/v1/users/*"
+    /**
+     * 白名单：仅放行必须公开的精确路径，避免过于宽泛的通配符。
+     * 格式为 "METHOD:PATH"，不区分方法的路径使用 "GET:/api/v1/notes" 格式。
+     */
+    private static final List<String> WHITE_LIST = List.of(
+            "POST:/api/v1/auth/login",
+            "POST:/api/v1/auth/sms-login",
+            "POST:/api/v1/auth/register",
+            "POST:/api/v1/auth/send-sms-code",
+            "POST:/api/v1/admin/auth/login",
+            "GET:/api/v1/notes",
+            "GET:/api/v1/tags/hot",
+            "GET:/api/v1/users/search",
+            "GET:/api/v1/search/notes",
+            "GET:/api/v1/search/users"
     );
 
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
         ServerHttpRequest request = exchange.getRequest();
         String path = request.getURI().getPath();
+        HttpMethod method = request.getMethod();
 
-        if (isWhiteList(path)) {
+        if (isWhiteList(method, path)) {
             return chain.filter(exchange);
         }
 
@@ -59,17 +64,20 @@ public class JwtAuthFilter implements GlobalFilter, Ordered {
 
         Long userId = JwtUtils.getUserId(token);
         String username = JwtUtils.getUsername(token);
+        String role = JwtUtils.getRole(token);
 
         ServerHttpRequest mutatedRequest = request.mutate()
                 .header(CommonConstants.REQUEST_USER_ID, String.valueOf(userId))
                 .header(CommonConstants.REQUEST_USERNAME, username)
+                .header(CommonConstants.REQUEST_USER_ROLE, role)
                 .build();
 
         return chain.filter(exchange.mutate().request(mutatedRequest).build());
     }
 
-    private boolean isWhiteList(String path) {
-        return WHITE_LIST.stream().anyMatch(pattern -> pathMatcher.match(pattern, path));
+    private boolean isWhiteList(HttpMethod method, String path) {
+        String key = method.name() + ":" + path;
+        return WHITE_LIST.contains(key);
     }
 
     private String resolveToken(ServerHttpRequest request) {

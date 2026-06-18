@@ -8,6 +8,7 @@ import com.langtou.message.dto.MessageSendDTO;
 import com.langtou.message.entity.Message;
 import com.langtou.message.service.MessageService;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -21,7 +22,7 @@ public class MessageController {
     private final MessageService messageService;
 
     @PostMapping("/messages/send")
-    public Result<Message> sendMessage(@RequestBody MessageSendDTO dto,
+    public Result<Message> sendMessage(@Valid @RequestBody MessageSendDTO dto,
                                        @RequestHeader(CommonConstants.REQUEST_USER_ID) Long senderId) {
         Message message = messageService.sendMessage(senderId, dto);
         return Result.success("发送成功", message);

@@ -11,6 +11,22 @@ spring:
           enabled: false
           lower-case-service-id: true
       routes:
+        - id: langtou-user-service-admin
+          uri: lb://langtou-user-service
+          predicates:
+            - Path=/api/v1/admin/auth/**, /api/v1/admin/users/**
+          filters:
+            - StripPrefix=2
+          order: 1
+
+        - id: langtou-content-service-admin
+          uri: lb://langtou-content-service
+          predicates:
+            - Path=/api/v1/admin/notes/**, /api/v1/admin/analytics/**, /api/v1/admin/settings/**, /api/v1/admin/sensitive-words/**, /api/v1/admin/audit/**
+          filters:
+            - StripPrefix=2
+          order: 2
+
         - id: langtou-user-service-auth
           uri: lb://langtou-user-service
           predicates:
@@ -62,7 +78,7 @@ spring:
         - id: langtou-content-service-search
           uri: lb://langtou-content-service
           predicates:
-            - Path=/api/v1/search
+            - Path=/api/v1/search/**
           filters:
             - StripPrefix=2
             - name: RequestRateLimiter
@@ -70,6 +86,61 @@ spring:
                 redis-rate-limiter.replenishRate: 200
                 redis-rate-limiter.burstCapacity: 400
                 key-resolver: "#{@ipKeyResolver}"
+
+        - id: langtou-content-service-creator
+          uri: lb://langtou-content-service
+          predicates:
+            - Path=/api/v1/creator/**
+          filters:
+            - StripPrefix=2
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 100
+                redis-rate-limiter.burstCapacity: 200
+                key-resolver: "#{@ipKeyResolver}"
+
+        - id: langtou-content-service-ads
+          uri: lb://langtou-content-service
+          predicates:
+            - Path=/api/v1/ads/**
+          filters:
+            - StripPrefix=2
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 200
+                redis-rate-limiter.burstCapacity: 400
+                key-resolver: "#{@ipKeyResolver}"
+
+        - id: langtou-content-service-upload
+          uri: lb://langtou-content-service
+          predicates:
+            - Path=/api/v1/upload/**
+          filters:
+            - StripPrefix=2
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 10
+                redis-rate-limiter.burstCapacity: 20
+                key-resolver: "#{@ipKeyResolver}"
+
+        - id: langtou-interact-service-comments
+          uri: lb://langtou-interact-service
+          predicates:
+            - Path=/api/v1/comments/**, /api/v1/notes/*/share-link, /api/v1/notes/*/report
+          filters:
+            - StripPrefix=2
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 100
+                redis-rate-limiter.burstCapacity: 200
+                key-resolver: "#{@ipKeyResolver}"
+
+        - id: langtou-content-service-analytics
+          uri: lb://langtou-content-service
+          predicates:
+            - Path=/api/v1/analytics/**
+          filters:
+            - StripPrefix=2
 
         - id: langtou-interact-service
           uri: lb://langtou-interact-service
@@ -110,7 +181,8 @@ spring:
       globalcors:
         cors-configurations:
           '[/**]':
-            allowedOrigins: "*"
+            # 生产环境应替换为实际域名，例如: https://www.langtou.com,https://admin.langtou.com
+            allowedOrigins: "http://localhost:3000,http://localhost:8080"
             allowedMethods: "*"
             allowedHeaders: "*"
             allowCredentials: false
@@ -123,6 +195,92 @@ spring:
         namespace: ${NACOS_NAMESPACE:}
         group: DEFAULT_GROUP
 
+# ============ Redis连接池优化 ============
+spring:
+  redis:
+    host: localhost
+    port: 6379
+    password:
+    database: 0
+    lettuce:
+      pool:
+        max-active: 20
+        max-idle: 10
+        min-idle: 5
+        max-wait: 3000ms
+      # Lettuce连接池监控
+      shutdown-timeout: 200ms
+
+# ============ Resilience4j 熔断降级配置 ============
+resilience4j:
+  circuitbreaker:
+    configs:
+      default:
+        # 慢调用阈值：超过3秒视为慢调用
+        slowCallDurationThreshold: 3s
+        # 慢调用比例阈值：超过50%慢调用则触发熔断
+        slowCallRateThreshold: 50
+        # 慢调用统计窗口大小
+        # 滑动窗口类型：COUNT_BASED（基于调用次数）
+        slidingWindowType: COUNT_BASED
+        # 滑动窗口大小：100次调用
+        slidingWindowSize: 100
+        # 最小调用次数：达到此数量后才计算失败率
+        minimumNumberOfCalls: 10
+        # 失败率阈值：50%失败率触发熔断
+        failureRateThreshold: 50
+        # 熔断器打开状态持续时间：10秒后进入半开状态
+        waitDurationInOpenState: 10s
+        # 半开状态允许的测试调用数
+        permittedNumberOfCallsInHalfOpenState: 5
+        # 自动从半开恢复到关闭状态（如果测试调用成功）
+        automaticTransitionFromOpenToHalfOpenEnabled: true
+    instances:
+      # 用户服务熔断器
+      userServiceCB:
+        baseConfig: default
+      # 内容服务熔断器
+      contentServiceCB:
+        baseConfig: default
+      # 互动服务熔断器
+      interactServiceCB:
+        baseConfig: default
+      # 消息服务熔断器
+      messageServiceCB:
+        baseConfig: default
+      # 搜索服务熔断器
+      searchServiceCB:
+        baseConfig: default
+      # 埋点服务熔断器（更宽松，避免影响核心功能）
+      analyticsServiceCB:
+        baseConfig: default
+        failureRateThreshold: 80
+        slowCallDurationThreshold: 5s
+
+management:
+  tracing:
+    sampling:
+      probability: 1.0
+  zipkin:
+    tracing:
+      endpoint: http://${ZIPKIN_HOST:localhost}:${ZIPKIN_PORT:9411}/api/v2/spans
+  # 暴露熔断器健康指标
+  endpoints:
+    web:
+      exposure:
+        include: health,info,circuitbreakers,metrics
+  endpoint:
+    health:
+      show-details: always
+    circuitbreakers:
+      enabled: true
+    metrics:
+      enabled: true
+
 logging:
   level:
     org.springframework.cloud.gateway: DEBUG
+    io.github.resilience4j: INFO
+
+jwt:
+  secret: ${JWT_SECRET:}

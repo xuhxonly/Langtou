@@ -3,6 +3,7 @@ from typing import Any, Dict, List, Optional
 import numpy as np
 
 from app.data import redis_client, mysql_client
+from app.models.content_model import content_model
 
 
 class UserFeatureExtractor:
@@ -36,7 +37,7 @@ class UserFeatureExtractor:
         interest_features = self._extract_interest_features(user_id)
         features.update(interest_features)
 
-        # Embedding (simplified - in production use pre-trained embeddings)
+        # Embedding based on user's historical interaction tags TF-IDF vector
         features["user_embedding"] = self._get_user_embedding(user_id)
 
         return features
@@ -121,10 +122,52 @@ class UserFeatureExtractor:
         return 1
 
     def _get_user_embedding(self, user_id: str) -> List[float]:
-        """Get user embedding vector (mock implementation)."""
-        # In production, load from model or embedding service
-        np.random.seed(hash(user_id) % 2**32)
-        return np.random.randn(self.feature_dim).tolist()
+        """Get user embedding vector based on historical interaction note tags TF-IDF."""
+        interactions = mysql_client.get_user_interactions(user_id)
+        if not interactions:
+            # Fallback: return zero vector if no interactions
+            return np.zeros(self.feature_dim).tolist()
+
+        # Aggregate tag TF-IDF vectors from interacted notes
+        vectors = []
+        for inter in interactions[:50]:
+            note_id = str(inter.get("target_id", ""))
+            if not note_id:
+                continue
+            note = mysql_client.get_note(note_id)
+            if not note:
+                continue
+
+            tags = note.get("tags", [])
+            if isinstance(tags, str):
+                tags = [t.strip() for t in tags.split(",") if t.strip()]
+            elif isinstance(tags, list):
+                tags = [str(t).strip() for t in tags if str(t).strip()]
+            else:
+                tags = []
+
+            if not tags:
+                continue
+
+            # Build a pseudo-document from tags and compute TF-IDF vector
+            tag_text = " ".join(tags)
+            try:
+                vec = content_model.vectorizer.transform([tag_text])
+                vectors.append(vec.toarray().flatten())
+            except Exception:
+                continue
+
+        if not vectors:
+            return np.zeros(self.feature_dim).tolist()
+
+        # Average all tag vectors to form user embedding, then pad/truncate to feature_dim
+        avg_vector = np.mean(vectors, axis=0)
+        if len(avg_vector) >= self.feature_dim:
+            return avg_vector[:self.feature_dim].tolist()
+        else:
+            padded = np.zeros(self.feature_dim)
+            padded[:len(avg_vector)] = avg_vector
+            return padded.tolist()
 
 
 user_feature_extractor = UserFeatureExtractor()

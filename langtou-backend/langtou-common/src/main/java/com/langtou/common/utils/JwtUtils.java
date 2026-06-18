@@ -1,7 +1,6 @@
 package com.langtou.common.utils;
 
 import io.jsonwebtoken.*;
-import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
@@ -9,6 +8,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import javax.crypto.SecretKey;
+import java.nio.charset.StandardCharsets;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
@@ -17,7 +17,7 @@ import java.util.Map;
 @Component
 public class JwtUtils {
 
-    @Value("${jwt.secret:langtou-secret-key-2024-very-long-and-secure-key-for-jwt-signing}")
+    @Value("${jwt.secret}")
     private String secret;
 
     @Value("${jwt.expiration:86400000}")
@@ -27,18 +27,32 @@ public class JwtUtils {
     private static long STATIC_EXPIRATION;
     private static SecretKey STATIC_KEY;
 
+    private static final int MIN_SECRET_LENGTH = 32;
+
     @PostConstruct
     public void init() {
+        if (secret == null || secret.isBlank()) {
+            throw new IllegalStateException("JWT密钥未配置，请在配置文件中设置 jwt.secret 属性");
+        }
+        if (secret.length() < MIN_SECRET_LENGTH) {
+            throw new IllegalStateException(
+                    "JWT密钥长度不足，当前长度: " + secret.length() + "，最小要求: " + MIN_SECRET_LENGTH);
+        }
         STATIC_SECRET = secret;
         STATIC_EXPIRATION = expiration;
-        STATIC_KEY = Keys.hmacShaKeyFor(Decoders.BASE64.decode(
-                java.util.Base64.getEncoder().encodeToString(STATIC_SECRET.getBytes())));
+        STATIC_KEY = Keys.hmacShaKeyFor(STATIC_SECRET.getBytes(StandardCharsets.UTF_8));
+        log.info("JWT 密钥已初始化，长度: {} 字符", secret.length());
     }
 
     public static String generateToken(Long userId, String username) {
+        return generateToken(userId, username, "USER");
+    }
+
+    public static String generateToken(Long userId, String username, String role) {
         Map<String, Object> claims = new HashMap<>();
         claims.put("userId", userId);
         claims.put("username", username);
+        claims.put("role", role);
         return generateToken(claims);
     }
 
@@ -62,7 +76,7 @@ public class JwtUtils {
                     .getPayload();
         } catch (ExpiredJwtException e) {
             log.warn("Token已过期");
-            return e.getClaims();
+            return null;
         } catch (JwtException e) {
             log.error("Token解析失败: {}", e.getMessage());
             return null;
@@ -100,6 +114,15 @@ public class JwtUtils {
             return null;
         }
         return claims.get("username", String.class);
+    }
+
+    public static String getRole(String token) {
+        Claims claims = parseToken(token);
+        if (claims == null) {
+            return "USER";
+        }
+        String role = claims.get("role", String.class);
+        return role != null ? role : "USER";
     }
 
     public static boolean isTokenExpired(String token) {

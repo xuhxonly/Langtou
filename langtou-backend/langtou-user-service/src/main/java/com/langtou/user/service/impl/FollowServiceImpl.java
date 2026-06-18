@@ -2,6 +2,7 @@ package com.langtou.user.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.langtou.common.client.NotificationClient;
 import com.langtou.common.exception.BusinessException;
 import com.langtou.common.result.PageResult;
 import com.langtou.common.result.ResultCode;
@@ -21,6 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -34,6 +36,7 @@ public class FollowServiceImpl implements FollowService {
     private final FollowMapper followMapper;
     private final UserMapper userMapper;
     private final StringRedisTemplate stringRedisTemplate;
+    private final NotificationClient notificationClient;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Override
@@ -68,7 +71,27 @@ public class FollowServiceImpl implements FollowService {
             following.setFollowerCount(following.getFollowerCount() + 1);
             userMapper.updateById(following);
         }
+        // 发送关注通知
+        sendFollowNotification(followingId, followerId);
         log.info("关注成功: followerId={}, followingId={}", followerId, followingId);
+    }
+
+    private void sendFollowNotification(Long targetUserId, Long fromUserId) {
+        try {
+            if (targetUserId.equals(fromUserId)) {
+                return;
+            }
+            Map<String, Object> notification = new HashMap<>();
+            notification.put("userId", targetUserId);
+            notification.put("type", "FOLLOW");
+            notification.put("sourceId", fromUserId);
+            notification.put("sourceType", "user");
+            notification.put("content", "关注了你");
+            notification.put("fromUserId", fromUserId);
+            notificationClient.createNotification(notification);
+        } catch (Exception e) {
+            log.warn("发送关注通知失败: targetUserId={}, error={}", targetUserId, e.getMessage());
+        }
     }
 
     @Override

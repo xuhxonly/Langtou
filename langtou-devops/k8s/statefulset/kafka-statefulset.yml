@@ -1,0 +1,344 @@
+# ==========================================
+# Langtou 社交内容社区 APP - Kafka + Zookeeper StatefulSet
+# ==========================================
+# 部署在 langtou-infra 命名空间
+# 3节点 Kafka + 3节点 Zookeeper (KRaft模式备选, 当前使用ZK模式)
+# ==========================================
+
+---
+# Zookeeper Headless Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: zookeeper
+  namespace: langtou-infra
+  labels:
+    app: zookeeper
+    tier: messaging
+spec:
+  type: ClusterIP
+  clusterIP: None
+  selector:
+    app: zookeeper
+  ports:
+    - port: 2181
+      targetPort: 2181
+      name: client
+    - port: 2888
+      targetPort: 2888
+      name: server
+    - port: 3888
+      targetPort: 3888
+      name: leader-election
+
+---
+# Zookeeper StatefulSet
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: zookeeper
+  namespace: langtou-infra
+  labels:
+    app: zookeeper
+    tier: messaging
+spec:
+  serviceName: zookeeper
+  replicas: 3
+  selector:
+    matchLabels:
+      app: zookeeper
+      tier: messaging
+  template:
+    metadata:
+      labels:
+        app: zookeeper
+        tier: messaging
+    spec:
+      serviceAccountName: kafka-sa
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app
+                      operator: In
+                      values:
+                        - zookeeper
+                topologyKey: kubernetes.io/hostname
+      containers:
+        - name: zookeeper
+          image: confluentinc/cp-zookeeper:7.5.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 2181
+              name: client
+            - containerPort: 2888
+              name: server
+            - containerPort: 3888
+              name: leader-election
+          env:
+            - name: ZOOKEEPER_CLIENT_PORT
+              value: "2181"
+            - name: ZOOKEEPER_TICK_TIME
+              value: "2000"
+            - name: ZOOKEEPER_INIT_LIMIT
+              value: "5"
+            - name: ZOOKEEPER_SYNC_LIMIT
+              value: "2"
+            - name: ZOOKEEPER_SERVERS
+              value: "server.1=zookeeper-0.zookeeper:2888:3888;2181 server.2=zookeeper-1.zookeeper:2888:3888;2181 server.3=zookeeper-2.zookeeper:2888:3888;2181"
+            - name: ZOOKEEPER_SERVER_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+          command:
+            - /bin/bash
+            - -c
+            - |
+              # 从pod名称提取server id
+              export ZOOKEEPER_SERVER_ID=$((${ZOOKEEPER_SERVER_ID##*-} + 1))
+              echo "Starting Zookeeper with server ID: ${ZOOKEEPER_SERVER_ID}"
+              /etc/confluent/docker/run
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "100m"
+            limits:
+              memory: "1Gi"
+              cpu: "500m"
+          livenessProbe:
+            exec:
+              command:
+                - bash
+                - -c
+                - "echo 'ruok' | nc localhost 2181 | grep imok"
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 5
+          readinessProbe:
+            exec:
+              command:
+                - bash
+                - -c
+                - "echo 'ruok' | nc localhost 2181 | grep imok"
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          volumeMounts:
+            - name: zookeeper-data
+              mountPath: /var/lib/zookeeper/data
+            - name: zookeeper-logs
+              mountPath: /var/lib/zookeeper/log
+  volumeClaimTemplates:
+    - metadata:
+        name: zookeeper-data
+        labels:
+          app: zookeeper
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: standard
+        resources:
+          requests:
+            storage: 10Gi
+    - metadata:
+        name: zookeeper-logs
+        labels:
+          app: zookeeper
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: standard
+        resources:
+          requests:
+            storage: 5Gi
+
+---
+# Kafka Headless Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka
+  namespace: langtou-infra
+  labels:
+    app: kafka
+    tier: messaging
+spec:
+  type: ClusterIP
+  clusterIP: None
+  selector:
+    app: kafka
+  ports:
+    - port: 9092
+      targetPort: 9092
+      name: plaintext
+    - port: 9093
+      targetPort: 9093
+      name: internal
+    - port: 9308
+      targetPort: 9308
+      name: jmx
+
+---
+# Kafka 外部访问 Service (用于外部客户端)
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka-external
+  namespace: langtou-infra
+  labels:
+    app: kafka
+    tier: messaging
+spec:
+  type: NodePort
+  selector:
+    app: kafka
+  ports:
+    - port: 9094
+      targetPort: 9094
+      name: external
+    - port: 9308
+      targetPort: 9308
+      name: metrics
+
+---
+# Kafka StatefulSet
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: kafka
+  namespace: langtou-infra
+  labels:
+    app: kafka
+    tier: messaging
+spec:
+  serviceName: kafka
+  replicas: 3
+  selector:
+    matchLabels:
+      app: kafka
+      tier: messaging
+  template:
+    metadata:
+      labels:
+        app: kafka
+        tier: messaging
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9308"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: kafka-sa
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app
+                      operator: In
+                      values:
+                        - kafka
+                topologyKey: kubernetes.io/hostname
+      containers:
+        - name: kafka
+          image: confluentinc/cp-kafka:7.5.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 9092
+              name: plaintext
+            - containerPort: 9093
+              name: internal
+            - containerPort: 9094
+              name: external
+            - containerPort: 9308
+              name: jmx
+          env:
+            - name: KAFKA_BROKER_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: KAFKA_ZOOKEEPER_CONNECT
+              value: "zookeeper-0.zookeeper:2181,zookeeper-1.zookeeper:2181,zookeeper-2.zookeeper:2181"
+            - name: KAFKA_LISTENERS
+              value: "PLAINTEXT://:9092,INTERNAL://:9093,EXTERNAL://:9094"
+            - name: KAFKA_ADVERTISED_LISTENERS
+              value: "PLAINTEXT://kafka-$(KAFKA_BROKER_ID).kafka:9092,INTERNAL://kafka-$(KAFKA_BROKER_ID).kafka:9093,EXTERNAL://localhost:9094"
+            - name: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP
+              value: "PLAINTEXT:PLAINTEXT,INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT"
+            - name: KAFKA_INTER_BROKER_LISTENER_NAME
+              value: "INTERNAL"
+            - name: KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR
+              value: "3"
+            - name: KAFKA_DEFAULT_REPLICATION_FACTOR
+              value: "3"
+            - name: KAFKA_MIN_INSYNC_REPLICAS
+              value: "2"
+            - name: KAFKA_AUTO_CREATE_TOPICS_ENABLE
+              value: "true"
+            - name: KAFKA_NUM_PARTITIONS
+              value: "6"
+            - name: KAFKA_LOG_RETENTION_HOURS
+              value: "168"
+            - name: KAFKA_LOG_RETENTION_BYTES
+              value: "1073741824"
+            - name: KAFKA_LOG_SEGMENT_BYTES
+              value: "1073741824"
+            - name: KAFKA_LOG_CLEANER_ENABLE
+              value: "true"
+            - name: KAFKA_JMX_PORT
+              value: "9308"
+            - name: KAFKA_HEAP_OPTS
+              value: "-Xmx1g -Xms1g"
+          command:
+            - /bin/bash
+            - -c
+            - |
+              # 从pod名称提取broker id
+              export KAFKA_BROKER_ID=$((${KAFKA_BROKER_ID##*-}))
+              echo "Starting Kafka with broker ID: ${KAFKA_BROKER_ID}"
+              /etc/confluent/docker/run
+          resources:
+            requests:
+              memory: "1Gi"
+              cpu: "250m"
+            limits:
+              memory: "2Gi"
+              cpu: "2000m"
+          livenessProbe:
+            exec:
+              command:
+                - kafka-broker-api-versions
+                - --bootstrap-server
+                - localhost:9092
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 5
+          readinessProbe:
+            exec:
+              command:
+                - kafka-broker-api-versions
+                - --bootstrap-server
+                - localhost:9092
+            initialDelaySeconds: 30
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          volumeMounts:
+            - name: kafka-data
+              mountPath: /var/lib/kafka/data
+  volumeClaimTemplates:
+    - metadata:
+        name: kafka-data
+        labels:
+          app: kafka
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: standard
+        resources:
+          requests:
+            storage: 50Gi

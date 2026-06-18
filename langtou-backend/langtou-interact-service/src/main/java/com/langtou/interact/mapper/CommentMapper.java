@@ -5,6 +5,7 @@ import com.langtou.interact.entity.Comment;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
+import org.apache.ibatis.annotations.Update;
 
 import java.util.List;
 
@@ -19,4 +20,10 @@ public interface CommentMapper extends BaseMapper<Comment> {
 
     @Select("SELECT COUNT(*) FROM comment WHERE content_id = #{contentId} AND deleted = 0")
     Long countByContentId(@Param("contentId") Long contentId);
+
+    @Update("UPDATE comment SET like_count = like_count + 1 WHERE id = #{id} AND deleted = 0")
+    int incrementLikeCount(@Param("id") Long id);
+
+    @Update("UPDATE comment SET like_count = like_count - 1 WHERE id = #{id} AND like_count > 0 AND deleted = 0")
+    int decrementLikeCount(@Param("id") Long id);
 }

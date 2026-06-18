@@ -3,11 +3,14 @@ package com.langtou.content.controller;
 import com.langtou.common.constant.CommonConstants;
 import com.langtou.common.result.PageResult;
 import com.langtou.common.result.Result;
+import com.langtou.content.dto.AnalyticsEventDTO;
 import com.langtou.content.dto.ContentDTO;
 import com.langtou.content.dto.ContentSearchDTO;
 import com.langtou.content.dto.NoteDetailVO;
 import com.langtou.content.dto.NoteFeedVO;
+import com.langtou.content.service.AnalyticsService;
 import com.langtou.content.service.ContentService;
+import com.langtou.content.service.SearchService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
@@ -23,6 +26,8 @@ import java.util.Map;
 public class ContentController {
 
     private final ContentService contentService;
+    private final SearchService searchService;
+    private final AnalyticsService analyticsService;
 
     @PostMapping("/notes")
     public Result<ContentDTO> publish(@Valid @RequestBody ContentDTO contentDTO,
@@ -57,7 +62,7 @@ public class ContentController {
     @PutMapping("/notes/{noteId}")
     public Result<ContentDTO> updateNote(@PathVariable Long noteId,
                                            @RequestHeader(CommonConstants.REQUEST_USER_ID) Long userId,
-                                           @RequestBody ContentDTO contentDTO) {
+                                           @Valid @RequestBody ContentDTO contentDTO) {
         ContentDTO result = contentService.updateContent(noteId, userId, contentDTO);
         return Result.success("更新成功", result);
     }
@@ -70,6 +75,23 @@ public class ContentController {
                                                         @RequestParam(defaultValue = "1") int page,
                                                         @RequestParam(defaultValue = "20") int size) {
         PageResult<NoteFeedVO> result = contentService.getUserNotes(userId, page, size);
+        return Result.success(result);
+    }
+
+    /**
+     * 个性化推荐 Feed 流
+     * 优先调用推荐服务，若推荐服务不可用或无结果则 fallback 到时间倒序 Feed
+     *
+     * @param userId 用户ID（从请求头获取，未登录用户传 null 或走冷启动）
+     * @param page   页码
+     * @param size   每页数量
+     */
+    @GetMapping("/notes/recommended")
+    public Result<PageResult<NoteFeedVO>> getRecommendedFeed(
+            @RequestHeader(value = CommonConstants.REQUEST_USER_ID, required = false) Long userId,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        PageResult<NoteFeedVO> result = contentService.getRecommendedFeed(userId, page, size);
         return Result.success(result);
     }
 
@@ -98,6 +120,17 @@ public class ContentController {
         Map<String, String> data = new HashMap<>();
         data.put("url", fileUrl);
         return Result.success("上传成功", data);
+    }
+
+    /**
+     * 视频上传接口（限制视频格式和大小，最大500MB）
+     */
+    @PostMapping("/upload/video")
+    public Result<Map<String, String>> uploadVideo(@RequestParam("file") MultipartFile file) {
+        String fileUrl = contentService.uploadVideo(file);
+        Map<String, String> data = new HashMap<>();
+        data.put("url", fileUrl);
+        return Result.success("视频上传成功", data);
     }
 
     /**
@@ -154,5 +187,75 @@ public class ContentController {
     public Result<Void> decrementCollectCount(@PathVariable Long noteId) {
         contentService.decrementCollectCount(noteId);
         return Result.success();
+    }
+
+    /**
+     * 相关推荐笔记
+     */
+    @GetMapping("/notes/{noteId}/related")
+    public Result<PageResult<NoteFeedVO>> getRelatedNotes(@PathVariable Long noteId,
+                                                           @RequestParam(defaultValue = "1") int page,
+                                                           @RequestParam(defaultValue = "10") int size) {
+        PageResult<NoteFeedVO> result = contentService.getRelatedNotes(noteId, page, size);
+        return Result.success(result);
+    }
+
+    /**
+     * LBS附近笔记查询
+     * 基于经纬度查询指定半径范围内的笔记，按距离排序
+     *
+     * @param latitude  纬度
+     * @param longitude 经度
+     * @param radius    搜索半径（米），默认5000米
+     * @param page      页码
+     * @param size      每页数量
+     */
+    @GetMapping("/notes/nearby")
+    public Result<PageResult<NoteFeedVO>> getNearbyNotes(@RequestParam Double latitude,
+                                                        @RequestParam Double longitude,
+                                                        @RequestParam(defaultValue = "5000") Double radius,
+                                                        @RequestParam(defaultValue = "1") int page,
+                                                        @RequestParam(defaultValue = "20") int size) {
+        PageResult<NoteFeedVO> result = searchService.searchNearbyNotes(latitude, longitude, radius, page, size);
+        return Result.success(result);
+    }
+
+    /**
+     * 批量上报埋点事件
+     * 接收客户端批量发送的用户行为事件，写入Kafka + MySQL
+     *
+     * @param batchRequest 包含events列表的请求体
+     */
+    @PostMapping("/analytics/events")
+    public Result<Void> reportAnalyticsEvents(@RequestBody AnalyticsEventDTO.BatchRequest batchRequest) {
+        if (batchRequest.getEvents() == null || batchRequest.getEvents().isEmpty()) {
+            return Result.error("事件列表不能为空");
+        }
+        analyticsService.processBatchEvents(batchRequest.getEvents());
+        return Result.success("埋点上报成功");
+    }
+
+    /**
+     * 更新笔记可见性
+     */
+    @PutMapping("/notes/{noteId}/visibility")
+    public Result<Void> updateNoteVisibility(@PathVariable Long noteId,
+                                              @RequestHeader(CommonConstants.REQUEST_USER_ID) Long userId,
+                                              @RequestBody Map<String, Integer> body) {
+        Integer visibility = body.get("visibility");
+        contentService.updateNoteVisibility(noteId, userId, visibility);
+        return Result.success("可见性更新成功");
+    }
+
+    /**
+     * 置顶/取消置顶笔记
+     */
+    @PutMapping("/notes/{noteId}/pin")
+    public Result<Void> pinNote(@PathVariable Long noteId,
+                                 @RequestHeader(CommonConstants.REQUEST_USER_ID) Long userId,
+                                 @RequestBody Map<String, Boolean> body) {
+        Boolean pin = body.get("pin");
+        contentService.pinNote(noteId, userId, pin != null && pin);
+        return Result.success(pin != null && pin ? "置顶成功" : "取消置顶成功");
     }
 }

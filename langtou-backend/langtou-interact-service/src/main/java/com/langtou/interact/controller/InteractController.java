@@ -5,10 +5,14 @@ import com.langtou.common.result.Result;
 import com.langtou.common.utils.PageUtils;
 import com.langtou.interact.dto.CommentCreateDTO;
 import com.langtou.interact.dto.CommentVO;
+import com.langtou.interact.dto.ReportCreateDTO;
 import com.langtou.interact.entity.Comment;
+import com.langtou.interact.entity.Report;
 import com.langtou.interact.entity.ShareRecord;
 import com.langtou.interact.service.InteractService;
+import com.langtou.interact.service.ReportService;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -21,6 +25,7 @@ import java.util.Map;
 public class InteractController {
 
     private final InteractService interactService;
+    private final ReportService reportService;
 
     // ========== 点赞 ==========
 
@@ -95,5 +100,16 @@ public class InteractController {
         Map<String, String> data = new HashMap<>();
         data.put("shareLink", shareLink);
         return Result.success(data);
+    }
+
+    /**
+     * 举报笔记
+     */
+    @PostMapping("/notes/{noteId}/report")
+    public Result<Report> reportNote(@PathVariable Long noteId,
+                                     @Valid @RequestBody ReportCreateDTO dto,
+                                     @RequestHeader(CommonConstants.REQUEST_USER_ID) Long userId) {
+        Report report = reportService.createReport(userId, noteId, dto);
+        return Result.success("举报成功", report);
     }
 }

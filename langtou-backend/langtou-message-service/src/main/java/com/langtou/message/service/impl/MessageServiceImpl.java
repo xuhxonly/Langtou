@@ -15,7 +15,9 @@ import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -77,28 +79,44 @@ public class MessageServiceImpl implements MessageService {
             return new ArrayList<>();
         }
 
-        // 2. 为每个会话构建VO
+        // 2. 批量查询最新消息（避免N+1查询）
+        List<Message> latestMessages = messageMapper.batchSelectLatestMessages(userId, targetIds);
+        Map<Long, Message> latestMessageMap = new HashMap<>();
+        for (Message msg : latestMessages) {
+            Long targetId = msg.getSenderId().equals(userId) ? msg.getReceiverId() : msg.getSenderId();
+            latestMessageMap.put(targetId, msg);
+        }
+
+        // 3. 批量查询未读数（避免N+1查询）
+        List<Map<String, Object>> unreadResults = messageMapper.batchCountUnreadFromSenders(userId, targetIds);
+        Map<Long, Long> unreadCountMap = new HashMap<>();
+        for (Map<String, Object> row : unreadResults) {
+            Object targetIdObj = row.get("targetId");
+            Object countObj = row.get("unreadCount");
+            if (targetIdObj != null && countObj != null) {
+                unreadCountMap.put(Long.valueOf(targetIdObj.toString()), Long.valueOf(countObj.toString()));
+            }
+        }
+
+        // 4. 为每个会话构建VO
         List<ConversationVO> conversations = new ArrayList<>();
         for (Long targetId : targetIds) {
             ConversationVO vo = new ConversationVO();
             vo.setTargetUserId(targetId);
 
-            // 查询最新消息
-            Message latestMessage = messageMapper.selectLatestMessage(userId, targetId);
+            Message latestMessage = latestMessageMap.get(targetId);
             if (latestMessage != null) {
                 vo.setLastMessage(latestMessage.getContent());
                 vo.setLastMessageType(latestMessage.getMessageType());
                 vo.setLastMessageTime(latestMessage.getCreateTime());
             }
 
-            // 查询未读数
-            Long unreadCount = messageMapper.countUnreadFromSender(userId, targetId);
-            vo.setUnreadCount(unreadCount != null ? unreadCount : 0L);
+            vo.setUnreadCount(unreadCountMap.getOrDefault(targetId, 0L));
 
             conversations.add(vo);
         }
 
-        // 3. 按最新消息时间降序排列
+        // 5. 按最新消息时间降序排列
         conversations.sort((a, b) -> {
             if (a.getLastMessageTime() == null && b.getLastMessageTime() == null) return 0;
             if (a.getLastMessageTime() == null) return 1;

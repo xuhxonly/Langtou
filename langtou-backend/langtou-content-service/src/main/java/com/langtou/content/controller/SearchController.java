@@ -29,6 +29,8 @@ public class SearchController {
             @RequestHeader(value = CommonConstants.REQUEST_USER_ID, required = false) Long userId) {
         // 记录搜索历史
         searchService.recordSearchHistory(userId, keyword);
+        // 记录搜索词频次（用于热搜榜统计）
+        searchService.recordSearchKeyword(keyword);
         PageResult<NoteFeedVO> result = searchService.searchNotes(keyword, page, size);
         return Result.success(result);
     }
@@ -52,6 +54,17 @@ public class SearchController {
             @RequestParam(defaultValue = "10") int limit) {
         List<String> keywords = searchService.getHotSearchKeywords(limit);
         return Result.success(keywords);
+    }
+
+    /**
+     * 搜索建议（前缀匹配）
+     */
+    @GetMapping("/suggest")
+    public Result<List<String>> getSearchSuggestions(
+            @RequestParam String q,
+            @RequestParam(defaultValue = "10") int limit) {
+        List<String> suggestions = searchService.getSearchSuggestions(q, limit);
+        return Result.success(suggestions);
     }
 
     /**

@@ -37,4 +37,31 @@ public interface SearchService {
      * 清除用户搜索历史
      */
     void clearSearchHistory(Long userId);
+
+    /**
+     * LBS附近笔记查询
+     * 基于经纬度查询指定半径范围内的笔记，按距离排序
+     *
+     * @param lat    纬度
+     * @param lng    经度
+     * @param radius 搜索半径（米）
+     * @param page   页码
+     * @param size   每页数量
+     */
+    PageResult<NoteFeedVO> searchNearbyNotes(Double lat, Double lng, Double radius, int page, int size);
+
+    /**
+     * 搜索建议（前缀匹配）
+     */
+    List<String> getSearchSuggestions(String keyword, int limit);
+
+    /**
+     * 记录搜索词频次（用于热搜榜统计）
+     */
+    void recordSearchKeyword(String keyword);
+
+    /**
+     * 获取热搜榜（基于搜索频次排序）
+     */
+    List<String> getHotSearchRank(int limit);
 }

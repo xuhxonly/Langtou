@@ -10,7 +10,10 @@ import org.springframework.messaging.handler.annotation.DestinationVariable;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.SendTo;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
+import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
 import org.springframework.stereotype.Controller;
+
+import java.security.Principal;
 
 /**
  * 聊天WebSocket处理器，处理私信消息的实时推送
@@ -29,11 +32,11 @@ public class ChatWebSocketHandler {
      * 客户端发送到 /app/chat/send/{receiverId}
      */
     @MessageMapping("/chat/send/{receiverId}")
-    public void handleChatMessage(@DestinationVariable Long receiverId, String payload) {
+    public void handleChatMessage(@DestinationVariable Long receiverId, String payload, Principal principal) {
         try {
-            // TODO: 从消息头中获取发送者userId，MVP阶段暂时从payload解析
+            Long senderId = Long.valueOf(principal.getName());
             MessageSendDTO dto = objectMapper.readValue(payload, MessageSendDTO.class);
-            Message message = messageService.sendMessage(dto.getSenderId(), dto);
+            Message message = messageService.sendMessage(senderId, dto);
 
             // 推送给接收者
             messagingTemplate.convertAndSendToUser(
@@ -44,12 +47,12 @@ public class ChatWebSocketHandler {
 
             // 同时推送给发送者自己（用于消息确认）
             messagingTemplate.convertAndSendToUser(
-                    String.valueOf(dto.getSenderId()),
+                    String.valueOf(senderId),
                     "/queue/chat",
                     message
             );
 
-            log.info("私信推送成功: senderId={}, receiverId={}", dto.getSenderId(), receiverId);
+            log.info("私信推送成功: senderId={}, receiverId={}", senderId, receiverId);
         } catch (Exception e) {
             log.error("处理私信消息失败: receiverId={}, error={}", receiverId, e.getMessage(), e);
         }

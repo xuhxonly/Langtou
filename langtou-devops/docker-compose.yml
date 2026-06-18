@@ -22,9 +22,12 @@ volumes:
   nacos-data:
   grafana-data:
   prometheus-data:
+  alertmanager-data:
   kafka-data:
   zookeeper-data:
   nginx-data:
+  minio-data:
+  loki-data:
 
 services:
   # ==========================================
@@ -97,17 +100,14 @@ services:
       --innodb_buffer_pool_size=512M
 
   # ==========================================
-  # Redis Cluster (6节点: 3主3从)
+  # Redis Standalone (单节点模式，与推荐服务 redis.Redis() 客户端兼容)
   # ==========================================
-  langtou-redis-1:
+  langtou-redis:
     image: redis:7-alpine
-    container_name: langtou-redis-1
+    container_name: langtou-redis
     restart: always
     ports:
       - "6379:6379"
-      - "16379:16379"
-    volumes:
-      - ./scripts/redis-cluster.conf:/usr/local/etc/redis/redis.conf:ro
     networks:
       langtou-network:
         ipv4_address: 172.20.0.20
@@ -117,142 +117,7 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
-    command: redis-server /usr/local/etc/redis/redis.conf --port 6379 --cluster-enabled yes --cluster-config-file nodes.conf --cluster-node-timeout 5000 --appendonly yes --requirepass ${REDIS_PASSWORD} --masterauth ${REDIS_PASSWORD}
-
-  langtou-redis-2:
-    image: redis:7-alpine
-    container_name: langtou-redis-2
-    restart: always
-    ports:
-      - "6380:6380"
-      - "16380:16380"
-    volumes:
-      - ./scripts/redis-cluster.conf:/usr/local/etc/redis/redis.conf:ro
-    networks:
-      langtou-network:
-        ipv4_address: 172.20.0.21
-    healthcheck:
-      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
-    command: redis-server /usr/local/etc/redis/redis.conf --port 6380 --cluster-enabled yes --cluster-config-file nodes.conf --cluster-node-timeout 5000 --appendonly yes --requirepass ${REDIS_PASSWORD} --masterauth ${REDIS_PASSWORD}
-
-  langtou-redis-3:
-    image: redis:7-alpine
-    container_name: langtou-redis-3
-    restart: always
-    ports:
-      - "6381:6381"
-      - "16381:16381"
-    volumes:
-      - ./scripts/redis-cluster.conf:/usr/local/etc/redis/redis.conf:ro
-    networks:
-      langtou-network:
-        ipv4_address: 172.20.0.22
-    healthcheck:
-      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
-    command: redis-server /usr/local/etc/redis/redis.conf --port 6381 --cluster-enabled yes --cluster-config-file nodes.conf --cluster-node-timeout 5000 --appendonly yes --requirepass ${REDIS_PASSWORD} --masterauth ${REDIS_PASSWORD}
-
-  langtou-redis-4:
-    image: redis:7-alpine
-    container_name: langtou-redis-4
-    restart: always
-    ports:
-      - "6382:6382"
-      - "16382:16382"
-    volumes:
-      - ./scripts/redis-cluster.conf:/usr/local/etc/redis/redis.conf:ro
-    networks:
-      langtou-network:
-        ipv4_address: 172.20.0.23
-    healthcheck:
-      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
-    command: redis-server /usr/local/etc/redis/redis.conf --port 6382 --cluster-enabled yes --cluster-config-file nodes.conf --cluster-node-timeout 5000 --appendonly yes --requirepass ${REDIS_PASSWORD} --masterauth ${REDIS_PASSWORD}
-
-  langtou-redis-5:
-    image: redis:7-alpine
-    container_name: langtou-redis-5
-    restart: always
-    ports:
-      - "6383:6383"
-      - "16383:16383"
-    volumes:
-      - ./scripts/redis-cluster.conf:/usr/local/etc/redis/redis.conf:ro
-    networks:
-      langtou-network:
-        ipv4_address: 172.20.0.24
-    healthcheck:
-      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
-    command: redis-server /usr/local/etc/redis/redis.conf --port 6383 --cluster-enabled yes --cluster-config-file nodes.conf --cluster-node-timeout 5000 --appendonly yes --requirepass ${REDIS_PASSWORD} --masterauth ${REDIS_PASSWORD}
-
-  langtou-redis-6:
-    image: redis:7-alpine
-    container_name: langtou-redis-6
-    restart: always
-    ports:
-      - "6384:6384"
-      - "16384:16384"
-    volumes:
-      - ./scripts/redis-cluster.conf:/usr/local/etc/redis/redis.conf:ro
-    networks:
-      langtou-network:
-        ipv4_address: 172.20.0.25
-    healthcheck:
-      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
-    command: redis-server /usr/local/etc/redis/redis.conf --port 6384 --cluster-enabled yes --cluster-config-file nodes.conf --cluster-node-timeout 5000 --appendonly yes --requirepass ${REDIS_PASSWORD} --masterauth ${REDIS_PASSWORD}
-
-  langtou-redis-cluster-init:
-    image: redis:7-alpine
-    container_name: langtou-redis-cluster-init
-    restart: "no"
-    depends_on:
-      langtou-redis-1:
-        condition: service_healthy
-      langtou-redis-2:
-        condition: service_healthy
-      langtou-redis-3:
-        condition: service_healthy
-      langtou-redis-4:
-        condition: service_healthy
-      langtou-redis-5:
-        condition: service_healthy
-      langtou-redis-6:
-        condition: service_healthy
-    networks:
-      - langtou-network
-    entrypoint: >
-      sh -c "
-        echo 'Waiting for all Redis nodes to be ready...' &&
-        sleep 3 &&
-        redis-cli --cluster create
-          172.20.0.20:6379
-          172.20.0.21:6380
-          172.20.0.22:6381
-          172.20.0.23:6382
-          172.20.0.24:6383
-          172.20.0.25:6384
-          --cluster-replicas 1
-          --cluster-yes
-          -a ${REDIS_PASSWORD}
-      "
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
 
   # ==========================================
   # Zookeeper
@@ -449,8 +314,8 @@ services:
     depends_on:
       langtou-nacos:
         condition: service_started
-      langtou-redis-cluster-init:
-        condition: service_completed_successfully
+      langtou-redis:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/actuator/health"]
       interval: 30s
@@ -476,7 +341,7 @@ services:
       - MYSQL_DATABASE=${MYSQL_DATABASE}
       - MYSQL_USER=${MYSQL_USER}
       - MYSQL_PASSWORD=${MYSQL_PASSWORD}
-      - REDIS_HOST=langtou-redis-1
+      - REDIS_HOST=langtou-redis
       - REDIS_PORT=6379
       - REDIS_PASSWORD=${REDIS_PASSWORD}
       - JVM_OPTS=${JVM_OPTS}
@@ -490,8 +355,8 @@ services:
         condition: service_healthy
       langtou-nacos:
         condition: service_healthy
-      langtou-redis-cluster-init:
-        condition: service_completed_successfully
+      langtou-redis:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/actuator/health"]
       interval: 30s
@@ -517,7 +382,7 @@ services:
       - MYSQL_DATABASE=${MYSQL_DATABASE}
       - MYSQL_USER=${MYSQL_USER}
       - MYSQL_PASSWORD=${MYSQL_PASSWORD}
-      - REDIS_HOST=langtou-redis-1
+      - REDIS_HOST=langtou-redis
       - REDIS_PORT=6379
       - REDIS_PASSWORD=${REDIS_PASSWORD}
       - ES_HOST=langtou-elasticsearch
@@ -537,8 +402,8 @@ services:
         condition: service_healthy
       langtou-elasticsearch:
         condition: service_healthy
-      langtou-redis-cluster-init:
-        condition: service_completed_successfully
+      langtou-redis:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/actuator/health"]
       interval: 30s
@@ -564,7 +429,7 @@ services:
       - MYSQL_DATABASE=${MYSQL_DATABASE}
       - MYSQL_USER=${MYSQL_USER}
       - MYSQL_PASSWORD=${MYSQL_PASSWORD}
-      - REDIS_HOST=langtou-redis-1
+      - REDIS_HOST=langtou-redis
       - REDIS_PORT=6379
       - REDIS_PASSWORD=${REDIS_PASSWORD}
       - KAFKA_BOOTSTRAP_SERVERS=langtou-kafka:9092
@@ -581,8 +446,8 @@ services:
         condition: service_healthy
       langtou-kafka:
         condition: service_healthy
-      langtou-redis-cluster-init:
-        condition: service_completed_successfully
+      langtou-redis:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/actuator/health"]
       interval: 30s
@@ -608,7 +473,7 @@ services:
       - MYSQL_DATABASE=${MYSQL_DATABASE}
       - MYSQL_USER=${MYSQL_USER}
       - MYSQL_PASSWORD=${MYSQL_PASSWORD}
-      - REDIS_HOST=langtou-redis-1
+      - REDIS_HOST=langtou-redis
       - REDIS_PORT=6379
       - REDIS_PASSWORD=${REDIS_PASSWORD}
       - KAFKA_BOOTSTRAP_SERVERS=langtou-kafka:9092
@@ -625,8 +490,8 @@ services:
         condition: service_healthy
       langtou-kafka:
         condition: service_healthy
-      langtou-redis-cluster-init:
-        condition: service_completed_successfully
+      langtou-redis:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/actuator/health"]
       interval: 30s
@@ -648,9 +513,16 @@ services:
     container_name: langtou-recommendation-service
     restart: always
     environment:
-      - REDIS_HOST=langtou-redis-1
+      - REDIS_HOST=langtou-redis
       - REDIS_PORT=6379
       - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - MYSQL_HOST=langtou-mysql
+      - MYSQL_PORT=3306
+      - MYSQL_DATABASE=${MYSQL_DATABASE}
+      - MYSQL_USER=${MYSQL_USER}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+      - KAFKA_BOOTSTRAP_SERVERS=langtou-kafka:9092
+      - KAFKA_TOPIC_EVENTS=user_events
       - ES_HOST=langtou-elasticsearch
       - ES_PORT=9200
       - ES_USERNAME=elastic
@@ -663,8 +535,8 @@ services:
     depends_on:
       langtou-elasticsearch:
         condition: service_healthy
-      langtou-redis-cluster-init:
-        condition: service_completed_successfully
+      langtou-redis:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8000/health"]
       interval: 30s
@@ -720,6 +592,7 @@ services:
     volumes:
       - grafana-data:/var/lib/grafana
       - ./monitoring/grafana-dashboard.json:/var/lib/grafana/dashboards/langtou-dashboard.json:ro
+      - ./monitoring/grafana-log-dashboard.json:/var/lib/grafana/dashboards/langtou-log-dashboard.json:ro
       - ./monitoring/grafana-provisioning:/etc/grafana/provisioning:ro
     networks:
       langtou-network:
@@ -733,3 +606,155 @@ services:
       timeout: 10s
       retries: 3
       start_period: 30s
+
+  # ==========================================
+  # Loki (日志聚合)
+  # ==========================================
+  langtou-loki:
+    image: grafana/loki:2.9.0
+    container_name: langtou-loki
+    restart: always
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./monitoring/loki-config.yml:/etc/loki/local-config.yaml:ro
+      - loki-data:/tmp/loki
+    networks:
+      langtou-network:
+        ipv4_address: 172.20.0.62
+    command: -config.file=/etc/loki/local-config.yaml
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3100/ready || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # ==========================================
+  # Promtail (日志收集)
+  # ==========================================
+  langtou-promtail:
+    image: grafana/promtail:2.9.0
+    container_name: langtou-promtail
+    restart: always
+    volumes:
+      - ./monitoring/promtail-config.yml:/etc/promtail/config.yml:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/log:/var/log:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - langtou-network
+    depends_on:
+      langtou-loki:
+        condition: service_healthy
+    command: -config.file=/etc/promtail/config.yml
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:9080/ready || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # ==========================================
+  # MinIO (对象存储)
+  # ==========================================
+  langtou-minio:
+    image: minio/minio:RELEASE.2024-05-01T01-11-10Z
+    container_name: langtou-minio
+    restart: always
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minioadmin}
+      TZ: ${TZ}
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio-data:/data
+    networks:
+      langtou-network:
+        ipv4_address: 172.20.0.80
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # ==========================================
+  # Alertmanager (告警管理)
+  # ==========================================
+  langtou-alertmanager:
+    image: prom/alertmanager:v0.27.0
+    container_name: langtou-alertmanager
+    restart: always
+    ports:
+      - "${ALERTMANAGER_PORT:-9093}:9093"
+    volumes:
+      - ./monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager-data:/alertmanager
+    networks:
+      langtou-network:
+        ipv4_address: 172.20.0.63
+    command:
+      - '--config.file=/etc/alertmanager/alertmanager.yml'
+      - '--storage.path=/alertmanager'
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9093/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ==========================================
+  # Exporters (监控指标采集)
+  # ==========================================
+  langtou-mysql-exporter:
+    image: prom/mysqld-exporter:v0.15.1
+    container_name: langtou-mysql-exporter
+    restart: always
+    environment:
+      DATA_SOURCE_NAME: "${MYSQL_USER}:${MYSQL_PASSWORD}@(langtou-mysql:3306)/${MYSQL_DATABASE}"
+      TZ: ${TZ}
+    ports:
+      - "9104:9104"
+    networks:
+      - langtou-network
+    depends_on:
+      langtou-mysql:
+        condition: service_healthy
+
+  langtou-redis-exporter:
+    image: oliver006/redis_exporter:v1.58.0
+    container_name: langtou-redis-exporter
+    restart: always
+    environment:
+      REDIS_ADDR: "redis://langtou-redis:6379"
+      REDIS_PASSWORD: "${REDIS_PASSWORD}"
+      TZ: ${TZ}
+    ports:
+      - "9121:9121"
+    networks:
+      - langtou-network
+    depends_on:
+      langtou-redis:
+        condition: service_healthy
+
+  langtou-node-exporter:
+    image: prom/node-exporter:v1.8.0
+    container_name: langtou-node-exporter
+    restart: always
+    ports:
+      - "9100:9100"
+    networks:
+      - langtou-network
+    command:
+      - '--path.rootfs=/host'
+      - '--collector.filesystem.mount-points-exclude=^/(dev|proc|sys|var/lib/docker/.+)($|/)'
+    volumes:
+      - /:/host:ro,rslave
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9100/metrics"]
+      interval: 30s
+      timeout: 10s
+      retries: 3

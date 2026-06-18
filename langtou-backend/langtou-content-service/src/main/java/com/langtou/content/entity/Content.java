@@ -29,6 +29,16 @@ public class Content {
 
     private String location;
 
+    /**
+     * 纬度（LBS附近笔记功能）
+     */
+    private Float latitude;
+
+    /**
+     * 经度（LBS附近笔记功能）
+     */
+    private Float longitude;
+
     private Integer likeCount;
 
     private Integer commentCount;
@@ -40,6 +50,26 @@ public class Content {
     private Integer viewCount;
 
     private Integer status;
+
+    /**
+     * 可见性: 0-公开, 1-私密, 2-粉丝可见
+     */
+    private Integer visibility;
+
+    /**
+     * 是否置顶
+     */
+    private Integer isPinned;
+
+    /**
+     * 置顶排序权重
+     */
+    private Integer pinOrder;
+
+    /**
+     * 年龄分级: ALL-全年龄 7+-7岁以上 12+-12岁以上 18+-18岁以上
+     */
+    private String ageRating;
 
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createdAt;

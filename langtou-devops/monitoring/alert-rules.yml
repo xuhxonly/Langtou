@@ -224,6 +224,165 @@ groups:
           description: "Nginx的错误率超过5% (当前值: {{ $value }}%)"
 
   # ==========================================
+  # 业务指标告警
+  # ==========================================
+  - name: business-metrics
+    interval: 60s
+    rules:
+      # DAU下降告警
+      - alert: DAUDrop
+        expr: |
+          (
+            sum(increase(langtou_user_login_total[1d]))
+            /
+            sum(increase(langtou_user_login_total[1d] offset 1d))
+          ) < 0.8
+        for: 30m
+        labels:
+          severity: warning
+          service: business
+          metric: dau
+        annotations:
+          summary: "DAU下降超过20%"
+          description: "今日DAU相比昨日同期下降超过20% (当前比率: {{ $value | humanizePercentage }})"
+
+      # DAU严重下降告警
+      - alert: DAUSevereDrop
+        expr: |
+          (
+            sum(increase(langtou_user_login_total[1d]))
+            /
+            sum(increase(langtou_user_login_total[1d] offset 1d))
+          ) < 0.5
+        for: 15m
+        labels:
+          severity: critical
+          service: business
+          metric: dau
+        annotations:
+          summary: "DAU严重下降超过50%"
+          description: "今日DAU相比昨日同期严重下降超过50% (当前比率: {{ $value | humanizePercentage }})"
+
+      # 发布量异常告警 (发布量骤降)
+      - alert: ContentPublishDrop
+        expr: |
+          (
+            sum(increase(langtou_content_publish_total[1h]))
+            /
+            sum(increase(langtou_content_publish_total[1h] offset 1d))
+          ) < 0.5
+        for: 30m
+        labels:
+          severity: warning
+          service: business
+          metric: content-publish
+        annotations:
+          summary: "内容发布量异常下降"
+          description: "内容发布量相比昨日同期下降超过50% (当前比率: {{ $value | humanizePercentage }})"
+
+      # 发布量激增告警 (可能是刷量)
+      - alert: ContentPublishSpike
+        expr: |
+          (
+            sum(increase(langtou_content_publish_total[1h]))
+            /
+            sum(increase(langtou_content_publish_total[1h] offset 1d))
+          ) > 3
+        for: 15m
+        labels:
+          severity: warning
+          service: business
+          metric: content-publish
+        annotations:
+          summary: "内容发布量异常激增"
+          description: "内容发布量相比昨日同期激增超过3倍 (当前比率: {{ $value | humanizePercentage }})，可能存在刷量行为"
+
+      # 互动率下降告警
+      - alert: InteractionRateDrop
+        expr: |
+          (
+            sum(increase(langtou_interaction_total[1h]))
+            /
+            sum(increase(langtou_content_view_total[1h]))
+          )
+          <
+          (
+            sum(increase(langtou_interaction_total[1h] offset 1d))
+            /
+            sum(increase(langtou_content_view_total[1h] offset 1d))
+          ) * 0.7
+        for: 1h
+        labels:
+          severity: warning
+          service: business
+          metric: interaction-rate
+        annotations:
+          summary: "用户互动率下降超过30%"
+          description: "当前互动率相比昨日同期下降超过30%，请关注内容质量和推荐效果"
+
+      # 用户留存下降告警
+      - alert: UserRetentionDrop
+        expr: |
+          (
+            sum(increase(langtou_user_return_next_day_total[1d]))
+            /
+            sum(increase(langtou_user_login_total[1d] offset 1d))
+          ) < 0.3
+        for: 2h
+        labels:
+          severity: warning
+          service: business
+          metric: retention
+        annotations:
+          summary: "次日留存率低于30%"
+          description: "次日留存率低于30% (当前值: {{ $value | humanizePercentage }})，请关注用户体验"
+
+      # 用户留存严重下降告警
+      - alert: UserRetentionSevereDrop
+        expr: |
+          (
+            sum(increase(langtou_user_return_next_day_total[1d]))
+            /
+            sum(increase(langtou_user_login_total[1d] offset 1d))
+          ) < 0.15
+        for: 1h
+        labels:
+          severity: critical
+          service: business
+          metric: retention
+        annotations:
+          summary: "次日留存率严重低于15%"
+          description: "次日留存率严重低于15% (当前值: {{ $value | humanizePercentage }})，请立即排查问题"
+
+      # 推荐服务异常告警
+      - alert: RecommendationServiceErrorRate
+        expr: |
+          sum(rate(recommendation_request_errors_total[5m]))
+          /
+          sum(rate(recommendation_requests_total[5m])) > 0.1
+        for: 5m
+        labels:
+          severity: critical
+          service: recommendation-service
+          metric: error-rate
+        annotations:
+          summary: "推荐服务错误率过高"
+          description: "推荐服务错误率超过10% (当前值: {{ $value | humanizePercentage }})"
+
+      # 推荐服务延迟告警
+      - alert: RecommendationServiceLatency
+        expr: |
+          histogram_quantile(0.95, sum(rate(recommendation_request_duration_seconds_bucket[5m])) by (le)) > 2
+        for: 5m
+        labels:
+          severity: warning
+          service: recommendation-service
+          metric: latency
+        annotations:
+          summary: "推荐服务P95延迟过高"
+          description: "推荐服务P95延迟超过2秒 (当前值: {{ $value }}s)"
+
+  # ==========================================
   # Kubernetes告警
   # ==========================================
   - name: kubernetes

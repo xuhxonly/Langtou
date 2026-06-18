@@ -209,4 +209,52 @@ CREATE TABLE `notification` (
     KEY `idx_user_type` (`user_id`, `type`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='通知';
 
+-- ============================================================
+-- 12. 用户等级/积分表 (user_level)
+-- ============================================================
+DROP TABLE IF EXISTS `user_level`;
+CREATE TABLE `user_level` (
+    `id`           BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY COMMENT 'ID',
+    `user_id`      BIGINT UNSIGNED NOT NULL COMMENT '用户ID',
+    `level`        INT UNSIGNED DEFAULT 1 COMMENT '当前等级',
+    `points`       INT UNSIGNED DEFAULT 0 COMMENT '当前积分',
+    `experience`   INT UNSIGNED DEFAULT 0 COMMENT '当前经验值',
+    `total_points` INT UNSIGNED DEFAULT 0 COMMENT '累计积分',
+    `created_at`   DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间',
+    `updated_at`   DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3) COMMENT '更新时间',
+    UNIQUE KEY `uk_user_id` (`user_id`),
+    KEY `idx_level` (`level`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户等级积分表';
+
+-- ============================================================
+-- 13. 用户成就表 (user_achievement)
+-- ============================================================
+DROP TABLE IF EXISTS `user_achievement`;
+CREATE TABLE `user_achievement` (
+    `id`             BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY COMMENT '成就ID',
+    `user_id`        BIGINT UNSIGNED NOT NULL COMMENT '用户ID',
+    `achievement_type` VARCHAR(50) NOT NULL COMMENT '成就类型',
+    `achievement_name` VARCHAR(100) NOT NULL COMMENT '成就名称',
+    `description`    VARCHAR(500) DEFAULT '' COMMENT '成就描述',
+    `icon_url`       VARCHAR(500) DEFAULT '' COMMENT '成就图标URL',
+    `obtained_at`    DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3) COMMENT '获得时间',
+    UNIQUE KEY `uk_user_achievement` (`user_id`, `achievement_type`),
+    KEY `idx_user_id` (`user_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户成就表';
+
+-- ============================================================
+-- 14. 积分记录表 (points_record)
+-- ============================================================
+DROP TABLE IF EXISTS `points_record`;
+CREATE TABLE `points_record` (
+    `id`           BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY COMMENT '记录ID',
+    `user_id`      BIGINT UNSIGNED NOT NULL COMMENT '用户ID',
+    `action_type`  VARCHAR(50) NOT NULL COMMENT '行为类型: PUBLISH_NOTE/LIKE_RECEIVED/FOLLOW_RECEIVED/COMMENT',
+    `points`       INT NOT NULL COMMENT '积分变化值',
+    `description`  VARCHAR(200) DEFAULT '' COMMENT '描述',
+    `created_at`   DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间',
+    KEY `idx_user_id` (`user_id`),
+    KEY `idx_created_at` (`created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='积分记录表';
+
 SET FOREIGN_KEY_CHECKS = 1;

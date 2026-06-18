@@ -2,6 +2,8 @@ package com.langtou.user.controller;
 
 import com.langtou.common.constant.CommonConstants;
 import com.langtou.common.result.Result;
+import com.langtou.user.dto.BindPhoneDTO;
+import com.langtou.user.dto.ChangePasswordDTO;
 import com.langtou.user.dto.SendSmsCodeDTO;
 import com.langtou.user.dto.SmsLoginDTO;
 import com.langtou.user.dto.UserDTO;
@@ -44,11 +46,9 @@ public class UserController {
      * 发送短信验证码
      */
     @PostMapping("/auth/send-sms-code")
-    public Result<Map<String, String>> sendSmsCode(@Valid @RequestBody SendSmsCodeDTO dto) {
-        String code = userService.sendSmsCode(dto.getPhone());
-        Map<String, String> data = new HashMap<>();
-        data.put("code", code);
-        return Result.success("验证码发送成功", data);
+    public Result<Void> sendSmsCode(@Valid @RequestBody SendSmsCodeDTO dto) {
+        userService.sendSmsCode(dto.getPhone());
+        return Result.success("验证码发送成功", null);
     }
 
     /**
@@ -77,7 +77,7 @@ public class UserController {
 
     @PutMapping("/users/me/profile")
     public Result<UserProfileVO> updateProfile(@RequestHeader(CommonConstants.REQUEST_USER_ID) Long userId,
-                                               @RequestBody UserDTO userDTO) {
+                                               @Valid @RequestBody UserDTO userDTO) {
         UserProfileVO profile = userService.updateProfile(userId, userDTO);
         return Result.success("资料更新成功", profile);
     }
@@ -152,5 +152,25 @@ public class UserController {
             return map;
         }).collect(Collectors.toList());
         return Result.success(result);
+    }
+
+    /**
+     * 修改密码
+     */
+    @PutMapping("/users/me/password")
+    public Result<Void> changePassword(@RequestHeader(CommonConstants.REQUEST_USER_ID) Long userId,
+                                        @Valid @RequestBody ChangePasswordDTO changePasswordDTO) {
+        userService.changePassword(userId, changePasswordDTO);
+        return Result.success("密码修改成功", null);
+    }
+
+    /**
+     * 绑定/修改手机号
+     */
+    @PutMapping("/users/me/phone")
+    public Result<Void> bindPhone(@RequestHeader(CommonConstants.REQUEST_USER_ID) Long userId,
+                                  @Valid @RequestBody BindPhoneDTO bindPhoneDTO) {
+        userService.bindPhone(userId, bindPhoneDTO);
+        return Result.success("手机号绑定成功", null);
     }
 }

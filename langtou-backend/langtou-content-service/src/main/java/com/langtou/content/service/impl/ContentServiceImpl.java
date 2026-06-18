@@ -17,6 +17,8 @@ import com.langtou.content.entity.Content;
 import com.langtou.content.mapper.ContentMapper;
 import com.langtou.content.service.ContentAuditService;
 import com.langtou.content.service.ContentService;
+import com.langtou.content.service.MinioService;
+import com.langtou.content.service.RecommendationService;
 import com.langtou.content.service.TagService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -35,7 +37,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -52,6 +56,8 @@ public class ContentServiceImpl implements ContentService {
     private final UserClient userClient;
     private final ContentAuditService contentAuditService;
     private final StringRedisTemplate stringRedisTemplate;
+    private final MinioService minioService;
+    private final RecommendationService recommendationService;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Value("${langtou.upload.path:/data/uploads/langtou/}")
@@ -75,6 +81,9 @@ public class ContentServiceImpl implements ContentService {
         if (!CollectionUtils.isEmpty(contentDTO.getMediaUrls())) {
             content.setImages(contentDTO.getMediaUrls());
         }
+        if (StringUtils.hasText(contentDTO.getVideoUrl())) {
+            content.setVideoUrl(contentDTO.getVideoUrl());
+        }
 
         // 内容审核
         boolean auditPassed = contentAuditService.checkContent(content, userId);
@@ -91,6 +100,14 @@ public class ContentServiceImpl implements ContentService {
         content.setCommentCount(0);
         content.setCollectCount(0);
         content.setShareCount(0);
+
+        // 写入经纬度（LBS附近笔记功能）
+        if (contentDTO.getLatitude() != null) {
+            content.setLatitude(contentDTO.getLatitude());
+        }
+        if (contentDTO.getLongitude() != null) {
+            content.setLongitude(contentDTO.getLongitude());
+        }
 
         contentMapper.insert(content);
 
@@ -149,6 +166,9 @@ public class ContentServiceImpl implements ContentService {
         if (!CollectionUtils.isEmpty(content.getImages())) {
             dto.setMediaUrls(content.getImages());
         }
+        if (StringUtils.hasText(content.getVideoUrl())) {
+            dto.setVideoUrl(content.getVideoUrl());
+        }
         return dto;
     }
 
@@ -192,6 +212,25 @@ public class ContentServiceImpl implements ContentService {
     }
 
     @Override
+    public PageResult<NoteFeedVO> getRecommendedFeed(Long userId, int page, int size) {
+        // 1. 优先调用推荐服务获取个性化推荐内容
+        try {
+            List<NoteFeedVO> recommended = recommendationService.recommendFeed(userId, page, size);
+            if (!CollectionUtils.isEmpty(recommended)) {
+                log.info("个性化推荐命中: userId={}, page={}, size={}, count={}", userId, page, size, recommended.size());
+                // 推荐结果分页包装（推荐服务已做召回+排序，此处直接包装）
+                return PageResult.of((long) recommended.size(), (long) page, (long) size, recommended);
+            }
+        } catch (Exception e) {
+            log.warn("个性化推荐服务调用失败，fallback到时间倒序: userId={}, error={}", userId, e.getMessage());
+        }
+
+        // 2. Fallback：推荐服务不可用或无结果时，回退到时间倒序Feed
+        log.info("个性化推荐fallback到时间倒序Feed: userId={}, page={}, size={}", userId, page, size);
+        return getFeedPage(page, size);
+    }
+
+    @Override
     public NoteDetailVO getNoteDetail(Long noteId) {
         // 先查Redis缓存
         String cacheKey = RedisKeyUtil.noteDetailKey(noteId);
@@ -226,6 +265,9 @@ public class ContentServiceImpl implements ContentService {
 
         if (!CollectionUtils.isEmpty(content.getImages())) {
             vo.setMediaUrls(content.getImages());
+        }
+        if (StringUtils.hasText(content.getVideoUrl())) {
+            vo.setVideoUrl(content.getVideoUrl());
         }
 
         // 通过Feign获取真实用户信息
@@ -353,6 +395,9 @@ public class ContentServiceImpl implements ContentService {
         if (!CollectionUtils.isEmpty(contentDTO.getMediaUrls())) {
             content.setImages(contentDTO.getMediaUrls());
         }
+        if (contentDTO.getVideoUrl() != null) {
+            content.setVideoUrl(contentDTO.getVideoUrl());
+        }
 
         contentMapper.updateById(content);
         log.info("内容更新成功: id={}, userId={}", noteId, userId);
@@ -371,6 +416,9 @@ public class ContentServiceImpl implements ContentService {
         List<NoteFeedVO> records = result.getRecords().stream()
                 .map(this::convertToFeedVO)
                 .collect(Collectors.toList());
+
+        // 批量填充作者信息，避免N+1问题
+        fillFeedAuthorInfoBatch(records);
 
         return PageResult.of(result.getTotal(), result.getCurrent(), result.getSize(), records);
     }
@@ -403,6 +451,9 @@ public class ContentServiceImpl implements ContentService {
                 .map(this::convertToFeedVO)
                 .collect(Collectors.toList());
 
+        // 批量填充作者信息，避免N+1问题
+        fillFeedAuthorInfoBatch(records);
+
         return PageResult.of(result.getTotal(), result.getCurrent(), result.getSize(), records);
     }
 
@@ -425,28 +476,41 @@ public class ContentServiceImpl implements ContentService {
             throw new BusinessException(ResultCode.FILE_TYPE_NOT_SUPPORTED, "不支持的文件类型: " + extension);
         }
 
-        try {
-            // 确保上传目录存在
-            Path uploadDir = Paths.get(uploadPath);
-            if (!Files.exists(uploadDir)) {
-                Files.createDirectories(uploadDir);
-            }
+        // 上传到MinIO并返回URL
+        String fileUrl = minioService.uploadFile(file);
+        log.info("文件上传成功: originalName={}, url={}", originalFilename, fileUrl);
+        return fileUrl;
+    }
 
-            // 生成唯一文件名（UUID + 原始扩展名）
-            String fileName = UUID.randomUUID().toString().replace("-", "") + "." + extension;
-            Path filePath = uploadDir.resolve(fileName);
-
-            // 保存文件
-            file.transferTo(filePath.toFile());
-
-            // 返回可访问的URL
-            String fileUrl = uploadUrlPrefix + fileName;
-            log.info("文件上传成功: originalName={}, savedName={}, url={}", originalFilename, fileName, fileUrl);
-            return fileUrl;
-        } catch (IOException e) {
-            log.error("文件上传失败: {}", e.getMessage(), e);
-            throw new BusinessException(ResultCode.FILE_UPLOAD_FAILED, "文件上传失败: " + e.getMessage());
+    @Override
+    public String uploadVideo(MultipartFile file) {
+        if (file == null || file.isEmpty()) {
+            throw new BusinessException(ResultCode.FILE_UPLOAD_FAILED, "上传视频不能为空");
         }
+
+        String originalFilename = file.getOriginalFilename();
+        if (originalFilename == null || originalFilename.isEmpty()) {
+            throw new BusinessException(ResultCode.FILE_UPLOAD_FAILED, "文件名不能为空");
+        }
+
+        // 获取文件扩展名
+        String extension = originalFilename.substring(originalFilename.lastIndexOf(".") + 1).toLowerCase();
+
+        // 校验视频类型
+        if (!ALLOWED_VIDEO_TYPES.contains(extension)) {
+            throw new BusinessException(ResultCode.FILE_TYPE_NOT_SUPPORTED, "不支持的视频格式: " + extension);
+        }
+
+        // 校验视频大小 (最大500MB)
+        long maxVideoSize = 500 * 1024 * 1024;
+        if (file.getSize() > maxVideoSize) {
+            throw new BusinessException(ResultCode.FILE_UPLOAD_FAILED, "视频大小不能超过500MB");
+        }
+
+        // 上传到MinIO并返回URL
+        String fileUrl = minioService.uploadFile(file);
+        log.info("视频上传成功: originalName={}, size={}, url={}", originalFilename, file.getSize(), fileUrl);
+        return fileUrl;
     }
 
     private NoteFeedVO convertToFeedVO(Content content) {
@@ -468,9 +532,11 @@ public class ContentServiceImpl implements ContentService {
         if (!CollectionUtils.isEmpty(content.getImages())) {
             vo.setCoverImage(content.getImages().get(0));
         }
+        if (StringUtils.hasText(content.getVideoUrl())) {
+            vo.setCoverImage(content.getVideoUrl());
+        }
 
-        // 通过Feign获取真实用户信息
-        fillFeedAuthorInfo(vo, content.getUserId());
+        // 不在此处调用 fillFeedAuthorInfo，由调用方统一批量填充
 
         return vo;
     }
@@ -498,6 +564,98 @@ public class ContentServiceImpl implements ContentService {
     @Override
     public void decrementCollectCount(Long noteId) {
         contentMapper.decrementCollectCount(noteId);
+    }
+
+    @Override
+    public PageResult<NoteFeedVO> getRelatedNotes(Long noteId, int page, int size) {
+        // 1. 获取当前笔记的标签ID列表
+        List<Long> tagIds = tagService.getTagIdsByNoteId(noteId);
+        if (tagIds.isEmpty()) {
+            // 无标签时，返回同作者的其他笔记
+            Content currentNote = contentMapper.selectById(noteId);
+            if (currentNote == null) {
+                throw new BusinessException(ResultCode.CONTENT_NOT_FOUND);
+            }
+            Page<Content> pageParam = new Page<>(page, size);
+            QueryWrapper<Content> wrapper = new QueryWrapper<>();
+            wrapper.eq("user_id", currentNote.getUserId())
+                    .ne("id", noteId)
+                    .eq("status", CommonConstants.STATUS_ENABLE)
+                    .orderByDesc("created_at");
+            Page<Content> result = contentMapper.selectPage(pageParam, wrapper);
+            List<NoteFeedVO> records = result.getRecords().stream()
+                    .map(this::convertToFeedVO)
+                    .collect(Collectors.toList());
+            // 批量填充作者信息，避免N+1问题
+            fillFeedAuthorInfoBatch(records);
+            return PageResult.of(result.getTotal(), result.getCurrent(), result.getSize(), records);
+        }
+
+        // 2. 获取拥有这些标签的其他笔记ID（去重，排除当前笔记）
+        Set<Long> relatedNoteIds = new LinkedHashSet<>();
+        for (Long tagId : tagIds) {
+            List<Long> noteIds = tagService.getNoteIdsByTagId(tagId);
+            if (noteIds != null) {
+                relatedNoteIds.addAll(noteIds);
+            }
+        }
+        relatedNoteIds.remove(noteId);
+
+        if (relatedNoteIds.isEmpty()) {
+            return PageResult.of(0L, (long) page, (long) size, Collections.emptyList());
+        }
+
+        // 3. 分页查询这些笔记
+        List<Long> noteIdList = new ArrayList<>(relatedNoteIds);
+        int from = (page - 1) * size;
+        int to = Math.min(from + size, noteIdList.size());
+        if (from >= noteIdList.size()) {
+            return PageResult.of((long) noteIdList.size(), (long) page, (long) size, Collections.emptyList());
+        }
+        List<Long> pageNoteIds = noteIdList.subList(from, to);
+
+        List<Content> contents = contentMapper.selectBatchIds(pageNoteIds);
+        List<NoteFeedVO> records = contents.stream()
+                .filter(c -> CommonConstants.STATUS_ENABLE.equals(c.getStatus()))
+                .map(this::convertToFeedVO)
+                .collect(Collectors.toList());
+
+        // 批量填充作者信息，避免N+1问题
+        fillFeedAuthorInfoBatch(records);
+
+        return PageResult.of((long) noteIdList.size(), (long) page, (long) size, records);
+    }
+
+    @Override
+    public void updateNoteVisibility(Long noteId, Long userId, Integer visibility) {
+        if (visibility == null || visibility < 0 || visibility > 2) {
+            throw new BusinessException(ResultCode.VISIBILITY_INVALID);
+        }
+        Content content = contentMapper.selectById(noteId);
+        if (content == null) {
+            throw new BusinessException(ResultCode.CONTENT_NOT_FOUND);
+        }
+        if (!content.getUserId().equals(userId)) {
+            throw new BusinessException(ResultCode.FORBIDDEN, "无权修改该笔记的可见性");
+        }
+        content.setVisibility(visibility);
+        contentMapper.updateById(content);
+        log.info("更新笔记可见性成功: noteId={}, visibility={}", noteId, visibility);
+    }
+
+    @Override
+    public void pinNote(Long noteId, Long userId, boolean pin) {
+        Content content = contentMapper.selectById(noteId);
+        if (content == null) {
+            throw new BusinessException(ResultCode.CONTENT_NOT_FOUND);
+        }
+        if (!content.getUserId().equals(userId)) {
+            throw new BusinessException(ResultCode.FORBIDDEN, "无权置顶该笔记");
+        }
+        content.setIsPinned(pin ? 1 : 0);
+        content.setPinOrder(pin ? 999 : 0);
+        contentMapper.updateById(content);
+        log.info("笔记置顶操作成功: noteId={}, pin={}", noteId, pin);
     }
 
     @Override
@@ -542,6 +700,9 @@ public class ContentServiceImpl implements ContentService {
         List<NoteFeedVO> records = result.getRecords().stream()
                 .map(this::convertToFeedVO)
                 .collect(Collectors.toList());
+
+        // 批量填充作者信息，避免N+1问题
+        fillFeedAuthorInfoBatch(records);
 
         PageResult<NoteFeedVO> pageResult = PageResult.of(result.getTotal(), result.getCurrent(), result.getSize(), records);
 

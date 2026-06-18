@@ -12,4 +12,6 @@ public interface NotificationService {
     void markAsRead(Long userId, Long notificationId);
 
     void markAllAsRead(Long userId);
+
+    void save(Notification notification);
 }

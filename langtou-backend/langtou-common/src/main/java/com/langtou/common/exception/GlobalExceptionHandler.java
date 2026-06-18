@@ -4,6 +4,7 @@ import com.langtou.common.result.Result;
 import com.langtou.common.result.ResultCode;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.validation.BindException;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
@@ -19,6 +20,16 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(BindException.class)
     public Result<Void> handleBindException(BindException e) {
+        String message = e.getBindingResult().getFieldErrors().stream()
+                .map(error -> error.getField() + ": " + error.getDefaultMessage())
+                .findFirst()
+                .orElse("参数校验失败");
+        log.warn("参数校验失败: {}", message);
+        return Result.error(ResultCode.PARAM_ERROR.getCode(), message);
+    }
+
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public Result<Void> handleMethodArgumentNotValidException(MethodArgumentNotValidException e) {
         String message = e.getBindingResult().getFieldErrors().stream()
                 .map(error -> error.getField() + ": " + error.getDefaultMessage())
                 .findFirst()

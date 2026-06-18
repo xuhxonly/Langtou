@@ -1,5 +1,7 @@
 package com.langtou.user.service;
 
+import com.langtou.user.dto.BindPhoneDTO;
+import com.langtou.user.dto.ChangePasswordDTO;
 import com.langtou.user.dto.SmsLoginDTO;
 import com.langtou.user.dto.UserDTO;
 import com.langtou.user.dto.UserLoginDTO;
@@ -51,12 +53,24 @@ public interface UserService {
     List<Long> getFollowingIds(Long userId);
 
     /**
-     * 发送短信验证码（MVP阶段直接返回验证码）
+     * 发送短信验证码
+     * 生产环境应接入真实短信服务商（如阿里云短信、腾讯云短信等），
+     * 当前为开发测试阶段，验证码仅存储在Redis中，不会返回给客户端。
      */
-    String sendSmsCode(String phone);
+    void sendSmsCode(String phone);
 
     /**
      * 搜索用户（按昵称或用户名模糊匹配）
      */
     List<UserDTO> searchUsers(String keyword, int limit);
+
+    /**
+     * 修改密码
+     */
+    void changePassword(Long userId, ChangePasswordDTO changePasswordDTO);
+
+    /**
+     * 绑定/修改手机号
+     */
+    void bindPhone(Long userId, BindPhoneDTO bindPhoneDTO);
 }

@@ -1,0 +1,636 @@
+# ==========================================
+# Langtou 社交内容社区 APP - Kubernetes Network Policy
+# ==========================================
+# 限制微服务间只能访问必要的端口
+# 数据库只允许来自对应服务的访问
+# ==========================================
+
+---
+# 默认拒绝所有入站流量 (langtou命名空间)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+  namespace: langtou
+  labels:
+    app: langtou
+    policy: default-deny
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+
+---
+# 默认允许所有出站流量 (langtou命名空间)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-allow-egress
+  namespace: langtou
+  labels:
+    app: langtou
+    policy: default-allow-egress
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    - {}
+
+---
+# Gateway 网络策略
+# 允许: 外部Ingress(80/8080), 内部服务调用
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: gateway-network-policy
+  namespace: langtou
+  labels:
+    app: gateway
+    policy: service-access
+spec:
+  podSelector:
+    matchLabels:
+      app: gateway
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # 允许来自Ingress Controller的流量
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 8080
+    # 允许来自监控命名空间的流量
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: langtou-monitoring
+      ports:
+        - protocol: TCP
+          port: 8080
+  egress:
+    # 允许访问后端服务
+    - to:
+        - podSelector:
+            matchLabels:
+              tier: backend
+      ports:
+        - protocol: TCP
+          port: 8080
+    # 允许访问Nacos
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: langtou-infra
+      ports:
+        - protocol: TCP
+          port: 8848
+
+---
+# User Service 网络策略
+# 允许: Gateway访问(8080), 数据库访问(3306/6379)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: user-service-network-policy
+  namespace: langtou
+  labels:
+    app: user-service
+    policy: service-access
+spec:
+  podSelector:
+    matchLabels:
+      app: user-service
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # 允许来自Gateway的流量
+    - from:
+        - podSelector:
+            matchLabels:
+              app: gateway
+      ports:
+        - protocol: TCP
+          port: 8080
+    # 允许来自监控的流量
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: langtou-monitoring
+      ports:
+        - protocol: TCP
+          port: 8080
+  egress:
+    # 允许访问MySQL
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: langtou-infra
+        - podSelector:
+            matchLabels:
+              app: mysql
+      ports:
+        - protocol: TCP
+          port: 3306
+    # 允许访问Redis
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: langtou-infra
+        - podSelector:
+            matchLabels:
+              app: redis-cluster
+      ports:
+        - protocol: TCP
+          port: 6379
+    # 允许访问Nacos
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: langtou-infra
+      ports:
+        - protocol: TCP
+          port: 8848
+
+---
+# Content Service 网络策略
+# 允许: Gateway访问(8080), 数据库/ES/Redis访问
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: content-service-network-policy
+  namespace: langtou
+  labels:
+    app: content-service
+    policy: service-access
+spec:
+  podSelector:
+    matchLabels:
+      app: content-service
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: gateway
+      ports:
+        - protocol: TCP
+          port: 8080
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: langtou-monitoring
+      ports:
+        - protocol: TCP
+          port: 8080
+  egress:
+    # MySQL
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: langtou-infra
+        - podSelector:
+            matchLabels:
+              app: mysql
+      ports:
+        - protocol: TCP
+          port: 3306
+    # Redis
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: langtou-infra
+        - podSelector:
+            matchLabels:
+              app: redis-cluster
+      ports:
+        - protocol: TCP
+          port: 6379
+    # Elasticsearch
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: langtou-infra
+        - podSelector:
+            matchLabels:
+              app: elasticsearch
+      ports:
+        - protocol: TCP
+          port: 9200
+    # Nacos
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: langtou-infra
+      ports:
+        - protocol: TCP
+          port: 8848
+
+---
+# Interact Service 网络策略
+# 允许: Gateway访问(8080), 数据库/Redis/Kafka访问
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: interact-service-network-policy
+  namespace: langtou
+  labels:
+    app: interact-service
+    policy: service-access
+spec:
+  podSelector:
+    matchLabels:
+      app: interact-service
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: gateway
+      ports:
+        - protocol: TCP
+          port: 8080
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: langtou-monitoring
+      ports:
+        - protocol: TCP
+          port: 8080
+  egress:
+    # MySQL
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: langtou-infra
+        - podSelector:
+            matchLabels:
+              app: mysql
+      ports:
+        - protocol: TCP
+          port: 3306
+    # Redis
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: langtou-infra
+        - podSelector:
+            matchLabels:
+              app: redis-cluster
+      ports:
+        - protocol: TCP
+          port: 6379
+    # Kafka
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: langtou-infra
+        - podSelector:
+            matchLabels:
+              app: kafka
+      ports:
+        - protocol: TCP
+          port: 9092
+        - protocol: TCP
+          port: 9093
+    # Nacos
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: langtou-infra
+      ports:
+        - protocol: TCP
+          port: 8848
+
+---
+# Message Service 网络策略
+# 允许: Gateway访问(8080), 数据库/Redis/Kafka访问
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: message-service-network-policy
+  namespace: langtou
+  labels:
+    app: message-service
+    policy: service-access
+spec:
+  podSelector:
+    matchLabels:
+      app: message-service
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: gateway
+      ports:
+        - protocol: TCP
+          port: 8080
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: langtou-monitoring
+      ports:
+        - protocol: TCP
+          port: 8080
+  egress:
+    # MySQL
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: langtou-infra
+        - podSelector:
+            matchLabels:
+              app: mysql
+      ports:
+        - protocol: TCP
+          port: 3306
+    # Redis
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: langtou-infra
+        - podSelector:
+            matchLabels:
+              app: redis-cluster
+      ports:
+        - protocol: TCP
+          port: 6379
+    # Kafka
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: langtou-infra
+        - podSelector:
+            matchLabels:
+              app: kafka
+      ports:
+        - protocol: TCP
+          port: 9092
+        - protocol: TCP
+          port: 9093
+    # Nacos
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: langtou-infra
+      ports:
+        - protocol: TCP
+          port: 8848
+
+---
+# ==========================================
+# 基础设施命名空间网络策略 (langtou-infra)
+# ==========================================
+
+---
+# 基础设施默认拒绝所有入站流量
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress-infra
+  namespace: langtou-infra
+  labels:
+    app: langtou
+    policy: default-deny
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+
+---
+# MySQL 网络策略
+# 只允许来自 langtou 命名空间微服务的访问
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: mysql-network-policy
+  namespace: langtou-infra
+  labels:
+    app: mysql
+    policy: database-access
+spec:
+  podSelector:
+    matchLabels:
+      app: mysql
+  policyTypes:
+    - Ingress
+  ingress:
+    # 允许来自业务服务的访问
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: langtou
+      ports:
+        - protocol: TCP
+          port: 3306
+    # 允许来自监控的访问
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: langtou-monitoring
+      ports:
+        - protocol: TCP
+          port: 3306
+        - protocol: TCP
+          port: 9104
+
+---
+# Redis 网络策略
+# 只允许来自 langtou 命名空间微服务的访问
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: redis-network-policy
+  namespace: langtou-infra
+  labels:
+    app: redis-cluster
+    policy: database-access
+spec:
+  podSelector:
+    matchLabels:
+      app: redis-cluster
+  policyTypes:
+    - Ingress
+  ingress:
+    # 允许来自业务服务的访问
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: langtou
+      ports:
+        - protocol: TCP
+          port: 6379
+        - protocol: TCP
+          port: 16379
+    # 允许来自监控的访问
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: langtou-monitoring
+      ports:
+        - protocol: TCP
+          port: 6379
+        - protocol: TCP
+          port: 9121
+
+---
+# Kafka 网络策略
+# 只允许来自 langtou 命名空间微服务的访问
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: kafka-network-policy
+  namespace: langtou-infra
+  labels:
+    app: kafka
+    policy: messaging-access
+spec:
+  podSelector:
+    matchLabels:
+      app: kafka
+  policyTypes:
+    - Ingress
+  ingress:
+    # 允许来自业务服务的访问
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: langtou
+      ports:
+        - protocol: TCP
+          port: 9092
+        - protocol: TCP
+          port: 9093
+    # 允许来自监控的访问
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: langtou-monitoring
+      ports:
+        - protocol: TCP
+          port: 9092
+        - protocol: TCP
+          port: 9308
+
+---
+# Zookeeper 网络策略
+# 只允许来自 Kafka 的访问
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: zookeeper-network-policy
+  namespace: langtou-infra
+  labels:
+    app: zookeeper
+    policy: messaging-access
+spec:
+  podSelector:
+    matchLabels:
+      app: zookeeper
+  policyTypes:
+    - Ingress
+  ingress:
+    # 只允许来自Kafka的访问
+    - from:
+        - podSelector:
+            matchLabels:
+              app: kafka
+      ports:
+        - protocol: TCP
+          port: 2181
+        - protocol: TCP
+          port: 2888
+        - protocol: TCP
+          port: 3888
+
+---
+# Elasticsearch 网络策略
+# 只允许来自 langtou 命名空间微服务的访问
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: elasticsearch-network-policy
+  namespace: langtou-infra
+  labels:
+    app: elasticsearch
+    policy: search-access
+spec:
+  podSelector:
+    matchLabels:
+      app: elasticsearch
+  policyTypes:
+    - Ingress
+  ingress:
+    # 允许来自业务服务的访问
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: langtou
+      ports:
+        - protocol: TCP
+          port: 9200
+        - protocol: TCP
+          port: 9300
+    # 允许来自监控的访问
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: langtou-monitoring
+      ports:
+        - protocol: TCP
+          port: 9200
+    # 允许Kibana访问
+    - from:
+        - podSelector:
+            matchLabels:
+              app: kibana
+      ports:
+        - protocol: TCP
+          port: 9200
+
+---
+# Kibana 网络策略
+# 只允许来自 Ingress 和监控的访问
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: kibana-network-policy
+  namespace: langtou-infra
+  labels:
+    app: kibana
+    policy: search-access
+spec:
+  podSelector:
+    matchLabels:
+      app: kibana
+  policyTypes:
+    - Ingress
+  ingress:
+    # 允许来自Ingress Controller的访问
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 5601
+    # 允许来自监控的访问
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: langtou-monitoring
+      ports:
+        - protocol: TCP
+          port: 5601

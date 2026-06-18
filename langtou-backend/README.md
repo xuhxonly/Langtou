@@ -1,6 +1,8 @@
-# Langtou Backend
+# Langtou Backend v7.0.0
 
 榔头(Langtou)社交内容社区APP后端微服务架构
+
+> **版本**: v7.0.0-RELEASE | **日期**: 2026-06-12 | **Sprint 1-4 全部完成**
 
 ## 技术栈
 

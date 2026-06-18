@@ -107,8 +107,14 @@ class RedisClient:
         return self.client.exists(key) > 0
 
     def keys(self, pattern: str) -> List[str]:
-        raw = self.client.keys(pattern)
-        return [k.decode("utf-8") if isinstance(k, bytes) else k for k in raw]
+        """使用 scan_iter 替代 keys() 避免 Redis 阻塞。"""
+        result = []
+        try:
+            for key in self.client.scan_iter(match=pattern, count=100):
+                result.append(key.decode("utf-8") if isinstance(key, bytes) else key)
+        except Exception:
+            pass
+        return result
 
     def flushdb(self) -> bool:
         return self.client.flushdb()

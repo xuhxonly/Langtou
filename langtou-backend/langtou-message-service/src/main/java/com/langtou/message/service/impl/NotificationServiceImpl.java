@@ -55,4 +55,9 @@ public class NotificationServiceImpl implements NotificationService {
         notificationMapper.markAllAsRead(userId);
         log.info("全部通知标记已读: userId={}", userId);
     }
+
+    @Override
+    public void save(Notification notification) {
+        notificationMapper.insert(notification);
+    }
 }

@@ -62,7 +62,7 @@ class CFRecall(RecallStrategy):
 
 
 class ContentRecall(RecallStrategy):
-    """Content-based Recall based on tags and text similarity."""
+    """Content-based Recall based on tags, text similarity, and multimodal features."""
 
     def __init__(self, weight: float = 0.8):
         super().__init__("content", weight)
@@ -97,15 +97,97 @@ class ContentRecall(RecallStrategy):
         # Search ES for notes with these tags
         results = es_client.search_by_tags(tag_list, size=num * 2)
 
-        # Score based on tag match count
+        # Score based on tag match count + multimodal similarity
         scored_items = []
         for note in results:
             note_tags = set(note.get("tags", []))
             match_count = len(note_tags & set(tag_list))
-            score = match_count / max(len(tag_list), 1)
-            scored_items.append((note.get("note_id", note.get("id", "")), score))
+            tag_score = match_count / max(len(tag_list), 1)
 
+            # 多模态相似度加分
+            multimodal_score = self._compute_multimodal_similarity(user_id, note)
+
+            # 综合得分: 标签匹配70% + 多模态相似度30%
+            combined_score = tag_score * 0.7 + multimodal_score * 0.3
+            scored_items.append((note.get("note_id", note.get("id", "")), combined_score))
+
+        # Sort by combined score
+        scored_items.sort(key=lambda x: x[1], reverse=True)
         return scored_items[:num]
+
+    def _compute_multimodal_similarity(self, user_id: str, note: Dict[str, Any]) -> float:
+        """
+        计算用户偏好与笔记的多模态相似度。
+
+        基于用户历史交互笔记的多模态embedding与候选笔记的多模态embedding
+        计算余弦相似度，取最高相似度作为得分。
+
+        Args:
+            user_id: 用户ID
+            note: 候选笔记数据
+
+        Returns:
+            多模态相似度得分 [0, 1]
+        """
+        try:
+            from app.features.item_features import item_feature_extractor
+
+            note_id = note.get("note_id", note.get("id", ""))
+            if not note_id:
+                return 0.0
+
+            # 获取候选笔记的多模态embedding
+            candidate_features = item_feature_extractor.extract(str(note_id))
+            candidate_emb = candidate_features.get("multimodal_embedding", [])
+            if not candidate_emb:
+                return 0.0
+
+            candidate_vec = np.array(candidate_emb, dtype=np.float32)
+            candidate_norm = np.linalg.norm(candidate_vec)
+            if candidate_norm == 0:
+                return 0.0
+
+            # 获取用户历史交互笔记
+            user_key = f"user_history:{user_id}"
+            history = redis_client.lrange(user_key, 0, 20)
+
+            if not history:
+                return 0.0
+
+            # 计算与历史笔记的最大相似度
+            max_sim = 0.0
+            for record in history:
+                if isinstance(record, dict):
+                    hist_note_id = str(record.get("target_id", ""))
+                elif isinstance(record, str):
+                    hist_note_id = record
+                else:
+                    continue
+
+                if not hist_note_id or hist_note_id == str(note_id):
+                    continue
+
+                try:
+                    hist_features = item_feature_extractor.extract(hist_note_id)
+                    hist_emb = hist_features.get("multimodal_embedding", [])
+                    if not hist_emb:
+                        continue
+
+                    hist_vec = np.array(hist_emb, dtype=np.float32)
+                    hist_norm = np.linalg.norm(hist_vec)
+                    if hist_norm == 0:
+                        continue
+
+                    # 余弦相似度
+                    sim = float(np.dot(candidate_vec, hist_vec) / (candidate_norm * hist_norm))
+                    max_sim = max(max_sim, sim)
+                except Exception:
+                    continue
+
+            return max(0.0, min(1.0, max_sim))
+
+        except Exception:
+            return 0.0
 
 
 class HotRecall(RecallStrategy):

@@ -23,6 +23,7 @@ public class NoteDetailVO implements Serializable {
     private String textContent;
 
     private List<String> mediaUrls;
+    private String videoUrl;
 
     private Integer contentType;
 

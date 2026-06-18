@@ -15,3 +15,21 @@ datasources:
       cacheLevel: 'High'
       incrementalQuerying: true
       incrementalQueryOverlapWindow: 10m
+
+  - name: Loki
+    type: loki
+    access: proxy
+    url: http://loki:3100
+    isDefault: false
+    editable: true
+    jsonData:
+      httpMethod: POST
+      manageAlerts: true
+      maxLines: 1000
+      derivedFields:
+        - name: TraceID
+          matcherRegex: '"trace_id":"([^"]+)"'
+          url: ''
+        - name: Service
+          matcherRegex: '"service":"([^"]+)"'
+          url: ''

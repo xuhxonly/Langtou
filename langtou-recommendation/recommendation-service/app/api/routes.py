@@ -41,9 +41,11 @@ async def get_feed(
     user_id: str = Query(..., description="User ID"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
+    ab_test_group: str = Query(None, description="A/B test group (control/treatment)"),
 ):
     """
     Get personalized feed for a user.
+    Supports A/B test group parameter to use different ranking strategies.
     """
     trace_id = str(uuid.uuid4())
     settings = get_settings()
@@ -52,8 +54,13 @@ async def get_feed(
         # Step 1: Recall
         candidates = recall_engine.recall(user_id, context={"page": page})
 
-        # Step 2: Rank
-        ranked = rank_engine.rank(user_id, candidates, context={"page": page, "position": 0})
+        # Step 2: Rank (with A/B test group)
+        ranked = rank_engine.rank(
+            user_id,
+            candidates,
+            context={"page": page, "position": 0},
+            ab_test_group=ab_test_group,
+        )
 
         # Step 3: Re-rank
         final_items = reranker.rerank(user_id, ranked, context={"page": page})

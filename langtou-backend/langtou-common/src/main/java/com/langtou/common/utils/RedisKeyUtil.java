@@ -77,4 +77,16 @@ public class RedisKeyUtil {
 
     /** 关注/粉丝列表缓存TTL：10分钟 */
     public static final long FOLLOW_LIST_TTL = 10 * 60;
+
+    // ===== 推荐服务缓存 =====
+
+    /**
+     * 个性化推荐缓存: recommend:feed:{userId}:{page}:{size}
+     */
+    public static String userRecommendKey(Long userId, int page, int size) {
+        return "recommend:feed:" + userId + ":" + page + ":" + size;
+    }
+
+    /** 个性化推荐缓存TTL：5分钟 */
+    public static final long RECOMMEND_FEED_TTL = 5 * 60;
 }

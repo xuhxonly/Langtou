@@ -76,6 +76,18 @@ scrape_configs:
     metrics_path: /actuator/prometheus
 
   # ==========================================
+  # Python 推荐服务监控
+  # ==========================================
+  - job_name: 'recommendation-service'
+    static_configs:
+      - targets:
+          - recommendation-service:8000
+        labels:
+          service: 'recommendation-service'
+          group: 'langtou-backend'
+    metrics_path: /metrics
+
+  # ==========================================
   # Nginx监控
   # ==========================================
   - job_name: 'nginx'

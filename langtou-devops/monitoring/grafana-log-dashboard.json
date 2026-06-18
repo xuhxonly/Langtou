@@ -1,0 +1,350 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": "-- Grafana --",
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "gnetId": null,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "panels": [],
+      "title": "日志概览",
+      "type": "row"
+    },
+    {
+      "datasource": "Loki",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 100 },
+              { "color": "red", "value": 500 }
+            ]
+          },
+          "unit": "short"
+        }
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 1 },
+      "id": 2,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "pluginVersion": "10.2.0",
+      "targets": [
+        {
+          "expr": "sum(rate({job=\"docker\"}[5m]))",
+          "legendFormat": "日志速率 (条/秒)",
+          "refId": "A"
+        }
+      ],
+      "title": "日志产生速率",
+      "type": "stat"
+    },
+    {
+      "datasource": "Loki",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": { "type": "linear" },
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": { "group": "A", "mode": "none" },
+            "thresholdsStyle": { "mode": "off" }
+          },
+          "mappings": [],
+          "unit": "short"
+        }
+      },
+      "gridPos": { "h": 8, "w": 18, "x": 6, "y": 1 },
+      "id": 3,
+      "options": {
+        "legend": { "calcs": [], "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "single" }
+      },
+      "targets": [
+        {
+          "expr": "sum by (level) (rate({job=\"langtou-services\"} |= \"level\" [5m]))",
+          "legendFormat": "{{level}}",
+          "refId": "A"
+        }
+      ],
+      "title": "日志级别分布",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Loki",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 1 },
+              { "color": "green", "value": 10 }
+            ]
+          },
+          "unit": "short"
+        }
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 5 },
+      "id": 4,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "pluginVersion": "10.2.0",
+      "targets": [
+        {
+          "expr": "sum(rate({job=\"langtou-services\"} |= \"ERROR\" [5m]))",
+          "legendFormat": "错误日志速率",
+          "refId": "A"
+        }
+      ],
+      "title": "错误日志速率",
+      "type": "stat"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 9
+      },
+      "id": 5,
+      "panels": [],
+      "title": "服务日志",
+      "type": "row"
+    },
+    {
+      "datasource": "Loki",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 10 },
+      "id": 6,
+      "options": {
+        "showTime": true,
+        "wrapLogMessage": true,
+        "sortOrder": "Descending",
+        "enableLogDetails": true
+      },
+      "targets": [
+        {
+          "expr": "{job=\"langtou-services\"} |= \"$search\"",
+          "legendFormat": "",
+          "refId": "A"
+        }
+      ],
+      "title": "微服务日志",
+      "type": "logs"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 18
+      },
+      "id": 7,
+      "panels": [],
+      "title": "Nginx 日志",
+      "type": "row"
+    },
+    {
+      "datasource": "Loki",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 19 },
+      "id": 8,
+      "options": {
+        "showTime": true,
+        "wrapLogMessage": true,
+        "sortOrder": "Descending",
+        "enableLogDetails": true
+      },
+      "targets": [
+        {
+          "expr": "{job=\"nginx\", log_type=\"access\"} |= \"$search\"",
+          "legendFormat": "",
+          "refId": "A"
+        }
+      ],
+      "title": "Nginx 访问日志",
+      "type": "logs"
+    },
+    {
+      "datasource": "Loki",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 19 },
+      "id": 9,
+      "options": {
+        "showTime": true,
+        "wrapLogMessage": true,
+        "sortOrder": "Descending",
+        "enableLogDetails": true
+      },
+      "targets": [
+        {
+          "expr": "{job=\"nginx\", log_type=\"error\"} |= \"$search\"",
+          "legendFormat": "",
+          "refId": "A"
+        }
+      ],
+      "title": "Nginx 错误日志",
+      "type": "logs"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 27
+      },
+      "id": 10,
+      "panels": [],
+      "title": "错误分析",
+      "type": "row"
+    },
+    {
+      "datasource": "Loki",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": { "type": "linear" },
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": { "group": "A", "mode": "none" },
+            "thresholdsStyle": { "mode": "off" }
+          },
+          "mappings": [],
+          "unit": "short"
+        }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 28 },
+      "id": 11,
+      "options": {
+        "legend": { "calcs": [], "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "single" }
+      },
+      "targets": [
+        {
+          "expr": "sum by (logger) (rate({job=\"langtou-services\"} |= \"ERROR\" [5m]))",
+          "legendFormat": "{{logger}}",
+          "refId": "A"
+        }
+      ],
+      "title": "各Logger错误率",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Loki",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 28 },
+      "id": 12,
+      "options": {
+        "showTime": true,
+        "wrapLogMessage": true,
+        "sortOrder": "Descending",
+        "enableLogDetails": true
+      },
+      "targets": [
+        {
+          "expr": "{job=\"langtou-services\"} |= \"ERROR\" |= \"$search\"",
+          "legendFormat": "",
+          "refId": "A"
+        }
+      ],
+      "title": "错误日志详情",
+      "type": "logs"
+    }
+  ],
+  "refresh": "10s",
+  "schemaVersion": 38,
+  "style": "dark",
+  "tags": ["langtou", "logs", "loki"],
+  "templating": {
+    "list": [
+      {
+        "current": {
+          "selected": false,
+          "text": "",
+          "value": ""
+        },
+        "hide": 0,
+        "label": "搜索",
+        "name": "search",
+        "options": [
+          {
+            "selected": true,
+            "text": "",
+            "value": ""
+          }
+        ],
+        "query": "",
+        "skipUrlSync": false,
+        "type": "textbox"
+      }
+    ]
+  },
+  "time": { "from": "now-1h", "to": "now" },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Langtou - 日志查询仪表盘",
+  "uid": "langtou-logs",
+  "version": 1
+}
