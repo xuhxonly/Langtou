@@ -1,0 +1,26 @@
+﻿# 代码所有者配置文件
+# 路径规则 所有者
+
+# 后端微服务
+/src/backend/ @xuhxonly
+
+# 前端应用
+/src/frontend/ @xuhxonly
+
+# 移动端
+/src/mobile/ @xuhxonly
+
+# 推荐系统
+/src/recommendation/ @xuhxonly
+
+# 基础设施
+/infrastructure/ @xuhxonly
+
+# 文档
+/docs/ @xuhxonly
+
+# GitHub Actions
+/.github/ @xuhxonly
+
+# 配置文件
+*.yml *.yaml *.json @xuhxonly

@@ -119,9 +119,44 @@ npx react-native run-ios      # iOS
 - [数据库设计](infrastructure/database/)
 - [开发规范](docs/guides/development-guidelines.md)
 
+## 🔄 CI/CD
+
+本项目使用 GitHub Actions 实现自动化测试和部署：
+
+### CI Workflows
+
+| Workflow | 触发条件 | 功能 |
+|----------|---------|------|
+| [backend-ci.yml](.github/workflows/backend-ci.yml) | PR 到 main/develop | Java 单元测试、代码检查 |
+| [frontend-ci.yml](.github/workflows/frontend-ci.yml) | PR 到 main/develop | Vue/React 测试、构建 |
+| [python-ci.yml](.github/workflows/python-ci.yml) | PR 到 main/develop | Python lint、测试 |
+
+### CD Workflow
+
+| Workflow | 触发条件 | 功能 |
+|----------|---------|------|
+| [cd.yml](.github/workflows/cd.yml) | push 到 main | Docker 构建、推送到 GHCR、部署 |
+
+### 需要的 Secrets
+
+部署前请在 GitHub 仓库设置以下 Secrets：
+
+```
+STAGING_HOST       - 测试环境服务器地址
+STAGING_USER       - 测试环境 SSH 用户名
+STAGING_SSH_KEY    - 测试环境 SSH 私钥
+```
+
 ## 🤝 如何贡献
 
-欢迎贡献代码！请遵循以下步骤：
+欢迎贡献代码！我们非常期待你的参与。
+
+- 📖 [贡献指南](CONTRIBUTING.md) - 详细了解贡献流程
+- 🐛 [报告 Bug](https://github.com/xuhxonly/Langtou/issues/new?template=bug-report.yml) - 使用 Bug 模板
+- ✨ [功能请求](https://github.com/xuhxonly/Langtou/issues/new?template=feature-request.yml) - 提交功能建议
+- 🔒 [安全政策](SECURITY.md) - 了解如何报告安全漏洞
+
+### 快速开始
 
 1. Fork 本仓库
 2. 创建功能分支 (`git checkout -b feature/amazing-feature`)
@@ -129,7 +164,7 @@ npx react-native run-ios      # iOS
 4. 推送到分支 (`git push origin feature/amazing-feature`)
 5. 提交 Pull Request
 
-请确保遵循我们的[开发规范](docs/guides/development-guidelines.md)。
+请确保遵循我们的[开发规范](docs/guides/development-guidelines.md)和[代码提交规范](CONTRIBUTING.md#提交规范)。
 
 ## 💖 支持项目
 
