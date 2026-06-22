@@ -1,6 +1,10 @@
-﻿# 🔨 Langtou (榔头) - 开源内容社区框架
+# 🔨 Langtou (榔头) - 开源内容社区框架
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![CI: Backend](https://github.com/xuhxonly/Langtou/actions/workflows/backend-ci.yml/badge.svg)](https://github.com/xuhxonly/Langtou/actions/workflows/backend-ci.yml)
+[![CI: Frontend](https://github.com/xuhxonly/Langtou/actions/workflows/frontend-ci.yml/badge.svg)](https://github.com/xuhxonly/Langtou/actions/workflows/frontend-ci.yml)
+[![CI: Python](https://github.com/xuhxonly/Langtou/actions/workflows/python-ci.yml/badge.svg)](https://github.com/xuhxonly/Langtou/actions/workflows/python-ci.yml)
+[![CD: Deploy](https://github.com/xuhxonly/Langtou/actions/workflows/cd.yml/badge.svg)](https://github.com/xuhxonly/Langtou/actions/workflows/cd.yml)
 [![Stars](https://img.shields.io/badge/stars-welcome-brightgreen.svg)]()
 [![Issues](https://img.shields.io/badge/issues-welcome-red.svg)]()
 

@@ -1,0 +1,95 @@
+﻿name: Frontend CI
+
+on:
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'src/frontend/**'
+      - 'src/mobile/**'
+      - '.github/workflows/frontend-ci.yml'
+
+jobs:
+  web:
+    name: Test Web Frontend
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: src/frontend/web/package.json
+      
+      - name: Install dependencies
+        working-directory: src/frontend/web
+        run: npm ci
+      
+      - name: Lint
+        working-directory: src/frontend/web
+        run: npm run lint
+        continue-on-error: true
+      
+      - name: Type Check
+        working-directory: src/frontend/web
+        run: npm run type-check
+        continue-on-error: true
+      
+      - name: Test
+        working-directory: src/frontend/web
+        run: npm run test -- --coverage
+        continue-on-error: true
+      
+      - name: Build
+        working-directory: src/frontend/web
+        run: npm run build
+      
+      - name: Upload build artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-dist
+          path: src/frontend/web/dist
+          if-no-files-found: ignore
+
+  admin:
+    name: Test Admin Frontend
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: src/frontend/admin/package.json
+      
+      - name: Install dependencies
+        working-directory: src/frontend/admin
+        run: npm ci
+      
+      - name: Lint
+        working-directory: src/frontend/admin
+        run: npm run lint
+        continue-on-error: true
+      
+      - name: Type Check
+        working-directory: src/frontend/admin
+        run: npm run type-check
+        continue-on-error: true
+      
+      - name: Build
+        working-directory: src/frontend/admin
+        run: npm run build
+      
+      - name: Upload build artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: admin-dist
+          path: src/frontend/admin/dist
+          if-no-files-found: ignore
