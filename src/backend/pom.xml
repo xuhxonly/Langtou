@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿<?xml version="1.0" encoding="UTF-8"?>
+﻿﻿﻿﻿﻿﻿﻿<?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
@@ -36,6 +36,7 @@
         <jjwt.version>0.12.5</jjwt.version>
         <lombok.version>1.18.32</lombok.version>
         <mysql.version>8.0.33</mysql.version>
+        <h2.version>2.2.224</h2.version>
         <spring-cloud-alibaba.version>2023.0.1.0</spring-cloud-alibaba.version>
         <elasticsearch.version>8.11.0</elasticsearch.version>
         <minio.version>8.5.7</minio.version>
