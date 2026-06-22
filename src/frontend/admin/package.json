@@ -1,0 +1,28 @@
+{
+  "name": "langtou-admin",
+  "version": "1.0.0",
+  "private": true,
+  "description": "榔头 Langtou 管理后台 - 基于 Vue 3 + Vite + Element Plus",
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "type-check": "vue-tsc --noEmit"
+  },
+  "dependencies": {
+    "vue": "^3.4.21",
+    "vue-router": "^4.3.0",
+    "pinia": "^2.1.7",
+    "element-plus": "^2.6.1",
+    "@element-plus/icons-vue": "^2.3.1",
+    "axios": "^1.6.8",
+    "echarts": "^5.5.0"
+  },
+  "devDependencies": {
+    "vite": "^5.2.0",
+    "@vitejs/plugin-vue": "^5.0.4",
+    "typescript": "^5.4.3",
+    "vue-tsc": "^2.0.6",
+    "sass": "^1.72.0"
+  }
+}

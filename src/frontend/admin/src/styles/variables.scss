@@ -1,0 +1,133 @@
+// 榔头 Langtou 管理后台 - 全局样式变量
+// 品牌色主题（深色模式为主）
+
+:root {
+  /* 品牌主色 */
+  --lt-brand-color: #3b82f6;
+  --lt-brand-color-hover: #2563eb;
+  --lt-brand-secondary: #8b5cf6;
+  --lt-brand-bg: linear-gradient(135deg, #0b0e14 0%, #1e293b 100%);
+
+  /* 背景色 */
+  --lt-bg-primary: #0b0e14;
+  --lt-bg-secondary: #131720;
+  --lt-card-bg: #171c28;
+  --lt-card-bg-hover: #1c2233;
+  --lt-input-bg: #1a2030;
+  --lt-aside-bg: #131720;
+  --lt-aside-hover: #1c2233;
+  --lt-header-bg: #131720;
+
+  /* 文字颜色 */
+  --lt-text-primary: #e4e8f1;
+  --lt-text-secondary: #8b95a8;
+  --lt-text-muted: #5a6478;
+
+  /* 边框 */
+  --lt-border-color: #252d3d;
+  --lt-border-light: #2a3348;
+
+  /* 功能色 */
+  --lt-color-green: #10b981;
+  --lt-color-green-bg: rgba(16, 185, 129, 0.12);
+  --lt-color-red: #ef4444;
+  --lt-color-red-bg: rgba(239, 68, 68, 0.12);
+  --lt-color-yellow: #f59e0b;
+  --lt-color-yellow-bg: rgba(245, 158, 11, 0.12);
+  --lt-color-purple: #8b5cf6;
+  --lt-color-purple-bg: rgba(139, 92, 246, 0.12);
+  --lt-color-cyan: #06b6d4;
+  --lt-color-cyan-bg: rgba(6, 182, 212, 0.12);
+
+  /* 布局尺寸 */
+  --lt-aside-width: 220px;
+  --lt-header-height: 60px;
+  --lt-radius: 8px;
+  --lt-radius-sm: 6px;
+  --lt-transition: all 0.2s ease;
+
+  /* 字体 */
+  --lt-font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
+    'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+
+  /* Element Plus 主题变量覆盖 */
+  --el-bg-color: var(--lt-card-bg);
+  --el-bg-color-page: var(--lt-bg-primary);
+  --el-bg-color-overlay: var(--lt-card-bg);
+  --el-text-color-primary: var(--lt-text-primary);
+  --el-text-color-regular: var(--lt-text-secondary);
+  --el-text-color-secondary: var(--lt-text-muted);
+  --el-border-color: var(--lt-border-color);
+  --el-fill-color: var(--lt-input-bg);
+  --el-color-primary: var(--lt-brand-color);
+  --el-color-primary-light-3: var(--lt-brand-color);
+  --el-color-primary-light-5: var(--lt-brand-color);
+  --el-color-primary-light-7: var(--lt-brand-color);
+  --el-color-primary-light-9: var(--lt-brand-color);
+  --el-menu-bg-color: var(--lt-aside-bg);
+  --el-menu-text-color: var(--lt-text-secondary);
+  --el-menu-hover-bg-color: var(--lt-aside-hover);
+  --el-menu-active-color: var(--lt-brand-color);
+  --el-header-bg-color: var(--lt-header-bg);
+}
+
+// 滚动条样式
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--lt-border-color);
+  border-radius: 3px;
+
+  &:hover {
+    background: var(--lt-border-light);
+  }
+}
+
+// Element Plus 深色模式全局覆盖
+.el-card,
+.el-dialog,
+.el-drawer,
+.el-message-box {
+  background-color: var(--lt-card-bg) !important;
+  border-color: var(--lt-border-color) !important;
+  color: var(--lt-text-primary);
+}
+
+.el-input__wrapper,
+.el-textarea__inner {
+  background-color: var(--lt-input-bg) !important;
+  box-shadow: 0 0 0 1px var(--lt-border-color) inset !important;
+  color: var(--lt-text-primary);
+}
+
+.el-table,
+.el-table tr,
+.el-table th.el-table__cell,
+.el-table td.el-table__cell {
+  background-color: transparent !important;
+}
+
+.el-table th.el-table__cell {
+  background-color: var(--lt-input-bg) !important;
+}
+
+.el-select__wrapper {
+  background-color: var(--lt-input-bg) !important;
+}
+
+.el-button--primary {
+  background-color: var(--lt-brand-color);
+  border-color: var(--lt-brand-color);
+
+  &:hover {
+    background-color: var(--lt-brand-color-hover);
+    border-color: var(--lt-brand-color-hover);
+  }
+}

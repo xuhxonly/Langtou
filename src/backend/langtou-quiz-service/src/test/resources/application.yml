@@ -1,0 +1,59 @@
+server:
+  port: 18089
+
+spring:
+  application:
+    name: langtou-quiz-service-test
+  datasource:
+    url: jdbc:h2:mem:langtou_quiz_test;MODE=MySQL;DB_CLOSE_DELAY=-1;DATABASE_TO_UPPER=FALSE;CASE_INSENSITIVE_IDENTIFIERS=TRUE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:schema.sql
+      data-locations: classpath:data.sql
+  flyway:
+    enabled: false
+  redis:
+    host: localhost
+    port: 0
+    lettuce:
+      pool:
+        max-active: 1
+  cloud:
+    nacos:
+      discovery:
+        enabled: false
+        register-enabled: false
+
+mybatis-plus:
+  mapper-locations: classpath*:/mapper/**/*.xml
+  type-aliases-package: com.langtou.quiz.entity
+  configuration:
+    map-underscore-to-camel-case: true
+  global-config:
+    db-config:
+      id-type: auto
+      logic-delete-field: deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+
+quiz:
+  question:
+    default-count: 10
+    min-count: 5
+    max-count: 12
+    per-question-seconds: 60
+    life-per-question: 1
+    passing-score: 7
+  revive:
+    max-per-game: 2
+    price-fen: 99
+  degrade:
+    level: NONE
+
+logging:
+  level:
+    com.langtou.quiz.mapper: INFO

@@ -1,0 +1,187 @@
+﻿# ==========================================
+# Langtou Content Service - Deployment & Service
+# ==========================================
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: content-service
+  namespace: langtou
+  labels:
+    app: content-service
+    tier: backend
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: content-service
+  template:
+    metadata:
+      labels:
+        app: content-service
+        tier: backend
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/actuator/prometheus"
+    spec:
+      imagePullSecrets:
+        - name: langtou-docker-registry
+      containers:
+        - name: content-service
+          image: docker.io.local/langtou/content-service:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+              name: http
+          env:
+            - name: SPRING_PROFILES_ACTIVE
+              value: "k8s"
+            - name: NACOS_SERVER_ADDR
+              valueFrom:
+                configMapKeyRef:
+                  name: langtou-service-config
+                  key: nacos-server-addr
+            - name: MYSQL_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: langtou-service-config
+                  key: mysql-host
+            - name: MYSQL_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: langtou-service-config
+                  key: mysql-port
+            - name: MYSQL_DATABASE
+              valueFrom:
+                configMapKeyRef:
+                  name: langtou-service-config
+                  key: mysql-database
+            - name: MYSQL_USER
+              valueFrom:
+                secretKeyRef:
+                  name: langtou-db-secret
+                  key: mysql-user
+            - name: MYSQL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: langtou-db-secret
+                  key: mysql-password
+            - name: REDIS_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: langtou-service-config
+                  key: redis-host
+            - name: REDIS_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: langtou-service-config
+                  key: redis-port
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: langtou-redis-secret
+                  key: redis-password
+            - name: ES_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: langtou-service-config
+                  key: es-host
+            - name: ES_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: langtou-service-config
+                  key: es-port
+            - name: ES_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: langtou-es-secret
+                  key: es-username
+            - name: ES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: langtou-es-secret
+                  key: es-password
+            - name: JVM_OPTS
+              value: "-Xms512m -Xmx1024m -XX:+UseG1GC"
+            - name: TZ
+              value: "Asia/Shanghai"
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "250m"
+            limits:
+              memory: "1Gi"
+              cpu: "1000m"
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8080
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: content-service
+  namespace: langtou
+  labels:
+    app: content-service
+spec:
+  type: ClusterIP
+  selector:
+    app: content-service
+  ports:
+    - port: 8080
+      targetPort: 8080
+      name: http
+
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: content-service-hpa
+  namespace: langtou
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: content-service
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80

@@ -1,0 +1,40 @@
+CREATE TABLE IF NOT EXISTS quiz_creative_record (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT NOT NULL COMMENT 'user id',
+    creative_type VARCHAR(32) NOT NULL COMMENT 'SITUATIONAL/VARIANT/STORY/GAME/PUZZLE',
+    subject VARCHAR(50) NOT NULL COMMENT 'subject: math/history/programming/chinese/english/physics/chemistry/biology',
+    stem TEXT COMMENT 'question stem',
+    option_a TEXT,
+    option_b TEXT,
+    option_c TEXT,
+    option_d TEXT,
+    correct_answer VARCHAR(16),
+    explanation TEXT,
+    difficulty DECIMAL(4,2) DEFAULT 5.00 COMMENT 'difficulty 1-10',
+    variant_type VARCHAR(32) COMMENT 'variant type when creative_type=VARIANT',
+    original_question_id BIGINT COMMENT 'original question id for variant',
+    context VARCHAR(1000) COMMENT 'context/story/prompt',
+    interests JSON COMMENT 'user interests applied',
+    metadata JSON COMMENT 'extra metadata from AI generation',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_user_id (user_id),
+    INDEX idx_subject (subject),
+    INDEX idx_creative_type (creative_type),
+    INDEX idx_original_question_id (original_question_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='AI generated creative question records';
+
+CREATE TABLE IF NOT EXISTS knowledge_connection (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    source_question_id BIGINT NOT NULL COMMENT 'source question id',
+    target_question_id BIGINT NOT NULL COMMENT 'target related question id',
+    connection_type VARCHAR(32) NOT NULL COMMENT 'EXTENSION/CHALLENGE/CROSS_DOMAIN/APPLICATION/HISTORY',
+    topic VARCHAR(100) COMMENT 'topic keyword',
+    description VARCHAR(500) COMMENT 'connection description',
+    strength INT DEFAULT 3 COMMENT 'strength 1-5',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_source_question_id (source_question_id),
+    INDEX idx_target_question_id (target_question_id),
+    INDEX idx_connection_type (connection_type),
+    INDEX idx_topic (topic),
+    UNIQUE KEY uk_source_target_type (source_question_id, target_question_id, connection_type)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='knowledge graph connections between questions';

@@ -1,0 +1,48 @@
+server:
+  port: 18088
+
+spring:
+  application:
+    name: langtou-game-service-test
+  datasource:
+    url: jdbc:h2:mem:langtou_test;MODE=MySQL;DB_CLOSE_DELAY=-1;DATABASE_TO_LOWER=TRUE;CASE_INSENSITIVE_IDENTIFIERS=TRUE
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:db/test_schema.sql
+      data-locations: classpath:db/test_data.sql
+  flyway:
+    enabled: false
+  redis:
+    host: localhost
+    port: 6379
+    timeout: 100ms
+    lettuce:
+      pool:
+        max-active: 1
+  cloud:
+    nacos:
+      discovery:
+        enabled: false
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration
+      - org.springframework.boot.autoconfigure.data.redis.RedisRepositoriesAutoConfiguration
+      - com.alibaba.cloud.nacos.discovery.NacosDiscoveryAutoConfiguration
+
+mybatis-plus:
+  mapper-locations: classpath*:/mapper/**/*.xml
+  type-aliases-package: com.langtou.game.entity
+  configuration:
+    map-underscore-to-camel-case: true
+  global-config:
+    db-config:
+      id-type: auto
+
+logging:
+  level:
+    com.langtou.game.mapper: debug
+    org.springframework.data.redis: warn

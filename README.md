@@ -1,158 +1,146 @@
-# 榔头 (Langtou) v7.0.0 - 社交内容社区APP
+﻿# 🔨 Langtou (榔头) - 开源内容社区框架
 
-> 一个类似小红书的社交内容社区全栈应用，采用微服务架构，支持图文/视频内容分享、个性化推荐、即时通讯、商品橱窗、创作者变现、青少年模式、AI创作助手等核心功能。
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Stars](https://img.shields.io/badge/stars-welcome-brightgreen.svg)]()
+[![Issues](https://img.shields.io/badge/issues-welcome-red.svg)]()
 
-> **版本**: v7.0.0 | **日期**: 2026-06-12 | **状态**: Sprint 1-4 全部完成，32个问题全部修复
+> 一个类似小红书的社交内容社区全栈开源框架，基于微服务架构，支持图文/视频内容分享、个性化推荐、即时通讯等核心功能。
 
----
+## ✨ 功能特性
 
-## 项目架构概览
+- 📝 **内容创作**：支持图文、视频笔记发布
+- 🔍 **智能推荐**：基于协同过滤的个性化 Feed 流
+- 💬 **即时通讯**：WebSocket 私信、系统通知
+- 👥 **社交关系**：关注、粉丝、互动
+- 🏪 **商品橱窗**：创作者变现
+- 📊 **数据分析**：内容表现统计
+- 🛠️ **管理后台**：内容审核、用户管理
+- 📱 **跨平台**：Web、iOS、Android
+
+## 🏗️ 项目结构
 
 ```
 langtou/
-├── langtou-backend/          # 后端微服务 (Spring Boot + Go)
-├── langtou-mobile/           # 移动端应用 (React Native)
-├── langtou-database/         # 数据库设计与迁移
-├── langtou-devops/           # DevOps基础设施
-├── langtou-recommendation/   # 推荐系统 (Python/FastAPI)
-└── xiaohongshu-architecture/ # 技术架构文档
+├── src/                           # 源代码
+│   ├── backend/                   # 后端微服务 (Spring Boot)
+│   ├── frontend/                  # 前端应用 (Vue 3)
+│   │   ├── web/                  #   用户端 Web
+│   │   └── admin/                #   管理后台
+│   ├── mobile/                    # 移动端 (React Native)
+│   └── recommendation/           # 推荐系统 (Python/FastAPI)
+├── infrastructure/                # 基础设施
+│   ├── database/                 #   数据库设计
+│   └── devops/                  #   运维部署
+├── docs/                          # 项目文档
+└── scripts/                       # 工具脚本
 ```
 
----
+## 🚀 快速开始
 
-## 技术栈
+### 环境要求
 
-| 层级 | 技术选型 |
-|------|---------|
-| **前端** | React Native 0.76+, TypeScript, Zustand, React Query |
-| **后端** | Spring Boot 3.x, Spring Cloud Gateway, Go Gin |
-| **数据库** | MySQL 8, Redis Cluster, Elasticsearch, MongoDB |
-| **消息队列** | Apache Kafka |
-| **推荐系统** | Python, FastAPI, XGBoost, LightGBM |
-| **DevOps** | Docker, Kubernetes, Jenkins, Prometheus, Grafana |
+- ☕ Java 21+
+- 🍃 Maven 3.9+
+- 🟢 Node.js 20+
+- 🐳 Docker 24+
+- 🗄️ MySQL 8+
+- 🔴 Redis 7+
 
----
-
-## 核心服务
-
-### 后端微服务
-
-| 服务 | 端口 | 说明 |
-|------|------|------|
-| `langtou-gateway` | 8080 | API网关，统一鉴权、限流、路由 |
-| `langtou-user-service` | 8081 | 用户服务，注册/登录/用户管理 |
-| `langtou-content-service` | 8082 | 内容服务，笔记发布/管理 |
-| `langtou-interact-service` | 8083 | 互动服务，点赞/评论/收藏 |
-| `langtou-message-service` | 8084 | 消息服务，私信/通知 |
-| `langtou-recommendation` | 8000 | 推荐服务，个性化Feed |
-
----
-
-## 快速开始
-
-### 1. 启动基础设施
+### 1. 克隆项目
 
 ```bash
-cd langtou-devops
-./scripts/start-all.sh
+git clone https://github.com/your-username/langtou.git
+cd langtou
 ```
 
-### 2. 初始化数据库
+### 2. 配置环境变量
 
 ```bash
-./scripts/init-db.sh
+cd infrastructure/devops
+cp .env.example .env
+# 编辑 .env 文件，填入你的实际配置
 ```
 
-### 3. 启动后端服务
+### 3. 启动基础设施
 
 ```bash
-cd langtou-backend
-mvn clean install
+# 启动 MySQL 和 Redis
+docker compose -f docker-compose.local.yml up -d
+
+# 或者启动完整环境（包括 Kafka、ES、Nacos 等）
+docker compose -f docker-compose.dev.yml --env-file .env up -d
+```
+
+### 4. 启动后端服务
+
+```bash
+cd src/backend
+mvn clean install -DskipTests
+
+# 分别启动各服务
 mvn spring-boot:run -pl langtou-gateway
 mvn spring-boot:run -pl langtou-user-service
+mvn spring-boot:run -pl langtou-content-service
 # ... 其他服务
 ```
 
-### 4. 启动移动端
+### 5. 启动前端
 
 ```bash
-cd langtou-mobile/LangtouMobile
+# Web 用户端
+cd src/frontend/web
 npm install
-npx react-native run-ios    # iOS
-npx react-native run-android # Android
+npm run dev
+
+# 管理后台
+cd ../admin
+npm install
+npm run dev
 ```
 
-### 5. 启动推荐服务
+### 6. 启动移动端
 
 ```bash
-cd langtou-recommendation/recommendation-service
-pip install -r requirements.txt
-python main.py
+cd src/mobile
+npm install
+npx react-native run-android  # Android
+npx react-native run-ios      # iOS
 ```
 
----
+## 📚 文档
 
-## 项目模块说明
+- [快速入门指南](docs/guides/getting-started.md)
+- [架构设计](docs/architecture/)
+- [API 文档](infrastructure/devops/docs/)
+- [数据库设计](infrastructure/database/)
+- [开发规范](docs/guides/development-guidelines.md)
 
-### langtou-backend
-Spring Boot 微服务集群，包含：
-- 统一响应封装、全局异常处理、JWT鉴权
-- MyBatis-Plus 数据访问
-- OpenFeign 服务间调用
-- 每个服务独立 Dockerfile
+## 🤝 如何贡献
 
-### langtou-mobile
-React Native 跨端应用，包含：
-- 双列瀑布流首页
-- 图文/视频发布
-- 私信聊天
-- 个人中心
-- 深色/浅色主题
+欢迎贡献代码！请遵循以下步骤：
 
-### langtou-database
-- 完整的 MySQL 表结构设计 (10张核心表)
-- Redis 缓存设计文档
-- Elasticsearch 索引 Mapping
-- Flyway 数据库迁移
+1. Fork 本仓库
+2. 创建功能分支 (`git checkout -b feature/amazing-feature`)
+3. 提交更改 (`git commit -m 'feat: add amazing feature'`)
+4. 推送到分支 (`git push origin feature/amazing-feature`)
+5. 提交 Pull Request
 
-### langtou-devops
-- Docker Compose 编排 (开发/生产环境)
-- Kubernetes 部署配置
-- Jenkins CI/CD 流水线
-- Prometheus + Grafana 监控
-- Nginx 反向代理
+请确保遵循我们的[开发规范](docs/guides/development-guidelines.md)。
 
-### langtou-recommendation
-- 多路召回 (协同过滤/内容相似/热度/画像)
-- XGBoost/LightGBM 排序模型
-- 多样性重排 (MMR算法)
-- FastAPI 服务接口
+## 💖 支持项目
+
+如果这个项目对你有帮助，请给我们一个 ⭐️ Star！
+
+你也可以通过以下方式支持我们：
+
+- 📝 在 Issue 里反馈问题
+- 🔀 提交 Pull Request
+- 📣 在社交媒体分享
+
+## 📄 许可证
+
+本项目基于 [MIT License](LICENSE) 开源。
 
 ---
 
-## 开发团队
-
-| 角色 | 职责 |
-|------|------|
-| 后端架构师 | 微服务框架搭建、服务拆分、API设计 |
-| 前端工程师 | React Native 开发、UI组件、状态管理 |
-| 数据库工程师 | 数据库设计、缓存策略、ES索引 |
-| DevOps工程师 | CI/CD、Docker/K8s、监控告警 |
-| 推荐算法工程师 | 召回/排序/重排算法、模型训练 |
-
----
-
-## 文档
-
-- [技术架构文档](xiaohongshu-architecture/xiaohongshu-architecture.html)
-- [后端服务 README](langtou-backend/README.md)
-- [移动端 README](langtou-mobile/LangtouMobile/README.md)
-- [数据库设计 README](langtou-database/README.md)
-- [DevOps README](langtou-devops/README.md)
-- [推荐系统 README](langtou-recommendation/README.md)
-
----
-
-## 许可证
-
-MIT License
+Made with ❤️ by the Langtou Team

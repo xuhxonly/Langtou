@@ -1,0 +1,5 @@
+﻿# Title
+- item 1
+- item 2
+with "quotes" and "double quotes" and (parens)
+line 4 has $dollar sign

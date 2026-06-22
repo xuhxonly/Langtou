@@ -1,0 +1,62 @@
+
+# ==========================================
+# 榔头内容社区 - 极简本地开发配置
+# 版本: V1.0 MVP
+# 描述: 仅包含后端服务运行必需的基础设施
+#       适合本地开发和功能验证
+# ==========================================
+
+services:
+  # MySQL 8.0 数据库
+  langtou-mysql:
+    image: mysql:8.0
+    container_name: langtou-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: root123  # 开发环境密码
+      MYSQL_DATABASE: langtou
+      MYSQL_USER: langtou
+      MYSQL_PASSWORD: langtou123
+      TZ: Asia/Shanghai
+    ports:
+      - "3306:3306"
+    command: >
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_unicode_ci
+      --default-authentication-plugin=mysql_native_password
+    volumes:
+      # 数据持久化
+      - ./docker-data/mysql:/var/lib/mysql
+      # 自动初始化数据库 (挂载到 initdb 目录会在首次启动时执行)
+      - ../backend/langtou-database/schema-content-community-v1.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-proot123"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    networks:
+      - langtou-net
+
+  # Redis 7.0 缓存
+  langtou-redis:
+    image: redis:7-alpine
+    container_name: langtou-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes --requirepass redis123
+    volumes:
+      - ./docker-data/redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "redis123", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    networks:
+      - langtou-net
+
+networks:
+  langtou-net:
+    driver: bridge

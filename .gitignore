@@ -1,23 +1,18 @@
 # ==================== 项目过程文件 / 临时文件 ====================
-# 上传目录（包含大文件 zip 包）
+# 上传目录
 .uploads/
 
-# 交付报告目录（HTML 交付物，包含 echarts.min.js、字体等）
-langtou-final-delivery/
-langtou-evaluation/
-langtou-xhs-gap-analysis/
-langtou-xiaohongshu-gap-analysis/
-
-# 团队输出产物
-langtou-team/dev-output/
-langtou-team/marketing-output/
-langtou-team/pm-output/
-langtou-team/qa-output/
+# 归档目录
+archive/
 
 # 打包文件
 *.zip
 *.tar.gz
 *.rar
+
+# JVM 崩溃日志
+hs_err_pid*
+replay_pid*
 
 # ==================== 构建产物 ====================
 # Java / Maven
@@ -69,10 +64,36 @@ Thumbs.db
 desktop.ini
 $RECYCLE.BIN/
 
-# ==================== 环境配置 ====================
+# ==================== 环境配置（敏感信息） ====================
+.env
 .env.local
 .env.*.local
+!.env.example
+
+# ==================== 敏感文件 ====================
+*.pem
+*.key
+*.crt
+*.p12
+*.jks
+credentials.json
+secrets.json
+*.secret
 
 # ==================== 数据库 ====================
 *.sql.bak
 *.dump
+*.sql.gz
+
+# ==================== 开源项目特定 ====================
+# 本地开发配置
+local.properties
+# 个人IDE配置
+.idea/
+*.iml
+# 测试覆盖率报告
+coverage/
+.nyc_output/
+# 性能分析文件
+*.cpuprofile
+*.heapprofile

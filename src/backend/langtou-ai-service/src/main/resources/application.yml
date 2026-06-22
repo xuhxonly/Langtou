@@ -1,0 +1,87 @@
+server:
+  port: 8087
+
+spring:
+  application:
+    name: langtou-ai-service
+  datasource:
+    url: jdbc:mysql://localhost:3306/langtou?useUnicode=true&characterEncoding=utf-8&useSSL=false&serverTimezone=Asia/Shanghai
+    username: root
+    password: ${DB_PASSWORD:root}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+      idle-timeout: 300000
+      max-lifetime: 1800000
+      connection-timeout: 3000
+      leak-detection-threshold: 60000
+      register-mbeans: true
+  redis:
+    host: localhost
+    port: 6379
+    password:
+    database: 0
+    lettuce:
+      pool:
+        max-active: 20
+        max-idle: 10
+        min-idle: 5
+        max-wait: 3000ms
+      shutdown-timeout: 200ms
+  cloud:
+    nacos:
+      discovery:
+        server-addr: ${NACOS_SERVER:localhost:8848}
+        namespace: ${NACOS_NAMESPACE:}
+        group: DEFAULT_GROUP
+
+langtou:
+  ai:
+    creation:
+      enabled: true
+      provider: ${AI_CREATION_PROVIDER:mock}
+      api-key: ${AI_CREATION_API_KEY:}
+      api-url: https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation
+      model: qwen-turbo
+      rate-limit: 10
+      cache-ttl: 3600
+
+mybatis-plus:
+  mapper-locations: classpath*:/mapper/**/*.xml
+  type-aliases-package: com.langtou.ai.entity
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
+  global-config:
+    db-config:
+      id-type: auto
+
+management:
+  tracing:
+    sampling:
+      probability: 1.0
+  zipkin:
+    tracing:
+      endpoint: http://${ZIPKIN_HOST:localhost}:${ZIPKIN_PORT:9411}/api/v2/spans
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: always
+    metrics:
+      enabled: true
+    prometheus:
+      enabled: true
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+
+logging:
+  level:
+    com.langtou.ai.mapper: debug
+    com.langtou.common.monitor: WARN
+    com.langtou.ai: INFO

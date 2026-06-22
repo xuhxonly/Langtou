@@ -1,0 +1,5 @@
+﻿Backticks: `sample`
+Backslash: \n \t \\
+Dollar: $var
+JSON: {"code": 200, "data": "x"}
+Curl: curl -s -X POST http://localhost:8089/api/v1/quiz/generate -H "X-User-Id: 1"

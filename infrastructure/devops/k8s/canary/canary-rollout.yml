@@ -1,0 +1,298 @@
+﻿# ==========================================
+# Langtou User Service - Canary Rollout (Argo Rollouts)
+# 渐进式流量切换: 10% -> 30% -> 50% -> 100%
+# 每步暂停等待人工验证
+# ==========================================
+
+---
+# Rollout 替代 Deployment 实现渐进式发布
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: user-service-rollout
+  namespace: langtou
+  labels:
+    app: user-service
+    tier: backend
+spec:
+  replicas: 2
+  strategy:
+    canary:
+      # 稳定版本服务引用
+      stableService: user-service-stable
+      # 金丝雀版本服务引用
+      canaryService: user-service-canary
+      # 自动回滚分析 (Prometheus指标)
+      analysis:
+        templates:
+          - templateName: success-rate
+        args:
+          - name: service-name
+            value: user-service
+        startingStep: 2
+        # 分析间隔
+        schedule:
+          - "0 * * * *"
+      # 流量路由
+      trafficRouting:
+        nginx:
+          stableIngress: user-service-stable-ingress
+      # 金丝雀发布步骤
+      steps:
+        # 步骤1: 暂停，等待金丝雀Pod就绪
+        - setWeight: 10
+        - pause: { duration: 5m }
+        # 步骤2: 自动分析 - 检查错误率和延迟
+        - analysis:
+            templates:
+              - templateName: success-rate
+              - templateName: latency-check
+            args:
+              - name: service-name
+                value: user-service
+        # 步骤3: 暂停等待人工确认
+        - pause: {}
+        # 步骤4: 增加到30%流量
+        - setWeight: 30
+        - pause: { duration: 5m }
+        # 步骤5: 自动分析
+        - analysis:
+            templates:
+              - templateName: success-rate
+              - templateName: latency-check
+            args:
+              - name: service-name
+                value: user-service
+        # 步骤6: 暂停等待人工确认
+        - pause: {}
+        # 步骤7: 增加到50%流量
+        - setWeight: 50
+        - pause: { duration: 10m }
+        # 步骤8: 自动分析
+        - analysis:
+            templates:
+              - templateName: success-rate
+              - templateName: latency-check
+              - templateName: error-rate
+            args:
+              - name: service-name
+                value: user-service
+        # 步骤9: 暂停等待人工确认
+        - pause: {}
+        # 步骤10: 全量发布
+        - setWeight: 100
+      # 自动回滚条件
+      abortScaleDownDelaySeconds: 30
+  selector:
+    matchLabels:
+      app: user-service
+  template:
+    metadata:
+      labels:
+        app: user-service
+        tier: backend
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/actuator/prometheus"
+    spec:
+      imagePullSecrets:
+        - name: langtou-docker-registry
+      containers:
+        - name: user-service
+          image: docker.io.local/langtou/user-service:stable
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+              name: http
+          env:
+            - name: SPRING_PROFILES_ACTIVE
+              value: "k8s"
+            - name: NACOS_SERVER_ADDR
+              valueFrom:
+                configMapKeyRef:
+                  name: langtou-service-config
+                  key: nacos-server-addr
+            - name: MYSQL_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: langtou-service-config
+                  key: mysql-host
+            - name: MYSQL_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: langtou-service-config
+                  key: mysql-port
+            - name: MYSQL_DATABASE
+              valueFrom:
+                configMapKeyRef:
+                  name: langtou-service-config
+                  key: mysql-database
+            - name: MYSQL_USER
+              valueFrom:
+                secretKeyRef:
+                  name: langtou-db-secret
+                  key: mysql-user
+            - name: MYSQL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: langtou-db-secret
+                  key: mysql-password
+            - name: REDIS_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: langtou-service-config
+                  key: redis-host
+            - name: REDIS_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: langtou-service-config
+                  key: redis-port
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: langtou-redis-secret
+                  key: redis-password
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: langtou-jwt-secret
+                  key: jwt-secret
+            - name: JVM_OPTS
+              value: "-Xms512m -Xmx1024m -XX:+UseG1GC"
+            - name: TZ
+              value: "Asia/Shanghai"
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "250m"
+            limits:
+              memory: "1Gi"
+              cpu: "1000m"
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8080
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+
+---
+# 稳定版本 Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: user-service-stable
+  namespace: langtou
+  labels:
+    app: user-service
+    track: stable
+spec:
+  type: ClusterIP
+  selector:
+    app: user-service
+  ports:
+    - port: 8080
+      targetPort: 8080
+      name: http
+
+---
+# 金丝雀版本 Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: user-service-canary
+  namespace: langtou
+  labels:
+    app: user-service
+    track: canary
+spec:
+  type: ClusterIP
+  selector:
+    app: user-service
+  ports:
+    - port: 8080
+      targetPort: 8080
+      name: http
+
+---
+# 分析模板 - 成功率检查
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: success-rate
+  namespace: langtou
+spec:
+  args:
+    - name: service-name
+  metrics:
+    - name: success-rate
+      interval: 60s
+      successCondition: result[0] >= 0.95
+      failureLimit: 3
+      provider:
+        prometheus:
+          address: http://prometheus-server.monitoring:9090
+          query: |
+            sum(rate(http_requests_total{service="{{args.service-name}}",status=~"2.."}[2m])) /
+            sum(rate(http_requests_total{service="{{args.service-name}}"}[2m]))
+
+---
+# 分析模板 - 延迟检查
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: latency-check
+  namespace: langtou
+spec:
+  args:
+    - name: service-name
+  metrics:
+    - name: avg-latency
+      interval: 60s
+      successCondition: result[0] <= 500
+      failureLimit: 3
+      provider:
+        prometheus:
+          address: http://prometheus-server.monitoring:9090
+          query: |
+            histogram_quantile(0.95,
+              sum(rate(http_request_duration_seconds_bucket{service="{{args.service-name}}"}[2m])) by (le)
+            )
+
+---
+# 分析模板 - 错误率检查
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: error-rate
+  namespace: langtou
+spec:
+  args:
+    - name: service-name
+  metrics:
+    - name: error-rate
+      interval: 60s
+      successCondition: result[0] <= 0.05
+      failureLimit: 3
+      provider:
+        prometheus:
+          address: http://prometheus-server.monitoring:9090
+          query: |
+            sum(rate(http_requests_total{service="{{args.service-name}}",status=~"5.."}[2m])) /
+            sum(rate(http_requests_total{service="{{args.service-name}}"}[2m]))
