@@ -1,0 +1,93 @@
+﻿name: Notifications
+
+on:
+  workflow_run:
+    workflows:
+      - 'Backend CI'
+      - 'Frontend CI'
+      - 'Python Service CI'
+      - 'CD - Build and Deploy'
+    types: [completed]
+
+jobs:
+  notify:
+    name: Send Notification
+    runs-on: ubuntu-latest
+    if: always()
+    
+    steps:
+      - name: Prepare notification payload
+        id: payload
+        run: |
+          STATUS="${{ needs.build-and-push.result }}"
+          if [ "$STATUS" = "success" ]; then
+            EMOJI="✅"
+            COLOR="good"
+            MSG="构建成功"
+          else
+            EMOJI="❌"
+            COLOR="danger"
+            MSG="构建失败"
+          fi
+          echo "status=$STATUS" >> $GITHUB_OUTPUT
+          echo "emoji=$EMOJI" >> $GITHUB_OUTPUT
+          echo "color=$COLOR" >> $GITHUB_OUTPUT
+          echo "msg=$MSG" >> $GITHUB_OUTPUT
+      
+      - name: Send Slack notification
+        if: env.SLACK_WEBHOOK_URL != ''
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          curl -X POST "$SLACK_WEBHOOK_URL" \
+            -H 'Content-type: application/json' \
+            --data "{
+              'text': '${{ steps.payload.outputs.emoji }} ${{ github.workflow }} - ${{ steps.payload.outputs.msg }}',
+              'blocks': [
+                {
+                  'type': 'section',
+                  'text': {
+                    'type': 'mrkdwn',
+                    'text': '*${{ github.workflow }}* ${{ steps.payload.outputs.msg }}'
+                  }
+                },
+                {
+                  'type': 'section',
+                  'fields': [
+                    {
+                      'type': 'mrkdwn',
+                      'text': '*仓库:*\n${{ github.repository }}'
+                    },
+                    {
+                      'type': 'mrkdwn',
+                      'text': '*分支:*\n${{ github.ref }}'
+                    },
+                    {
+                      'type': 'mrkdwn',
+                      'text': '*作者:*\n${{ github.actor }}'
+                    },
+                    {
+                      'type': 'mrkdwn',
+                      'text': '*运行链接:*\n[点击查看](${{ github.run_url }})'
+                    }
+                  ]
+                }
+              ]
+            }"
+        continue-on-error: true
+      
+      - name: Send DingTalk notification
+        if: env.DINGTALK_WEBHOOK_URL != ''
+        env:
+          DINGTALK_WEBHOOK_URL: ${{ secrets.DINGTALK_WEBHOOK_URL }}
+        run: |
+          curl -X POST "$DINGTALK_WEBHOOK_URL" \
+            -H 'Content-Type: application/json' \
+            -d "{
+              'msgtype': 'markdown',
+              'markdown': {
+                'title': 'CI/CD 通知',
+                'text': '## ${{ steps.payload.outputs.emoji }} ${{ github.workflow }}\n\n**状态**: ${{ steps.payload.outputs.msg }}\n**仓库**: ${{ github.repository }}\n**分支**: ${{ github.ref }}\n**作者**: ${{ github.actor }}\n\n[查看详情](${{ github.run_url }})'
+              }
+            }"
+        continue-on-error: true

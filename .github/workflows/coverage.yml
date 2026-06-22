@@ -1,0 +1,76 @@
+﻿name: Code Coverage
+
+on:
+  pull_request:
+    branches: [main, develop]
+  push:
+    branches: [main]
+
+jobs:
+  coverage:
+    name: Upload Coverage to Codecov
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        service:
+          - { name: 'backend', path: 'src/backend', language: 'java' }
+          - { name: 'frontend', path: 'src/frontend/web', language: 'javascript' }
+          - { name: 'python', path: 'src/recommendation', language: 'python' }
+    
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Set up environment
+        uses: actions/setup-java@v4
+        if: matrix.service.language == 'java'
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: 'maven'
+      
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        if: matrix.service.language == 'javascript'
+        with:
+          node-version: '20'
+          cache: 'npm'
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        if: matrix.service.language == 'python'
+        with:
+          python-version: '3.11'
+      
+      - name: Run backend tests with coverage
+        if: matrix.service.language == 'java'
+        working-directory: ${{ matrix.service.path }}
+        run: |
+          mvn clean test jacoco:report -B
+      
+      - name: Run frontend tests with coverage
+        if: matrix.service.language == 'javascript'
+        working-directory: ${{ matrix.service.path }}
+        run: |
+          npm ci
+          npm run test -- --coverage
+      
+      - name: Run Python tests with coverage
+        if: matrix.service.language == 'python'
+        working-directory: ${{ matrix.service.path }}
+        run: |
+          python -m venv venv
+          source venv/bin/activate
+          pip install -r requirements.txt
+          pytest --cov=. --cov-report=xml coverage.xml
+      
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          files: ${{ matrix.service.path }}/coverage.xml
+          flags: ${{ matrix.service.name }}
+          name: coverage-${{ matrix.service.name }}
+          fail_ci_if_error: false
+        continue-on-error: true

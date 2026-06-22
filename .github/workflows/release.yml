@@ -1,0 +1,97 @@
+﻿name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  create-release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Get version from tag
+        id: version
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+      
+      - name: Generate changelog
+        id: changelog
+        run: |
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          if [ -n "$PREV_TAG" ]; then
+            CHANGELOG=$(git log ${PREV_TAG}..HEAD --oneline --no-merges | head -50)
+          else
+            CHANGELOG="## 🎉 首次发布\n\n$(git log --oneline --no-merges | head -50)"
+          fi
+          echo "$CHANGELOG" > RELEASE_CHANGES.md
+          echo "changelog<<EOF" >> $GITHUB_OUTPUT
+          cat RELEASE_CHANGES.md >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+      
+      - name: Build artifacts
+        run: |
+          mkdir -p release-artifacts
+          
+          # Create source archive
+          tar -czf release-artifacts/langtou-${{ steps.version.outputs.version }}-source.tar.gz \
+            --exclude='.git' \
+            --exclude='node_modules' \
+            --exclude='target' \
+            --exclude='__pycache__' \
+            .
+      
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ steps.version.outputs.version }}
+          path: release-artifacts/
+      
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Langtou v${{ steps.version.outputs.version }}
+          body_path: RELEASE_CHANGES.md
+          files: |
+            release-artifacts/*.tar.gz
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Notify release
+        if: env.SLACK_WEBHOOK_URL != ''
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          curl -X POST "$SLACK_WEBHOOK_URL" \
+            -H 'Content-type: application/json' \
+            --data "{
+              'text': '🚀 Langtou v${{ steps.version.outputs.version }} 已发布！',
+              'blocks': [
+                {
+                  'type': 'section',
+                  'text': {
+                    'type': 'mrkdwn',
+                    'text': '*🚀 Langtou v${{ steps.version.outputs.version }} 已发布！*'
+                  }
+                },
+                {
+                  'type': 'section',
+                  'text': {
+                    'type': 'mrkdwn',
+                    'text': '**查看发布**: [GitHub Releases](https://github.com/${{ github.repository }}/releases)'
+                  }
+                }
+              ]
+            }"
+        continue-on-error: true
